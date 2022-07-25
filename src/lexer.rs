@@ -1,24 +1,26 @@
 use std::fmt::{Display, Formatter};
 
-pub struct CodePos {
+#[derive(Clone)]
+pub struct Span {
     col: u64,
     row: u64,
+    length: u64
 }
 
-impl Display for CodePos {
+impl Display for Span {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{:>4}:{:<4}", self.row, self.col)
     }
 }
 
 pub enum Lexeme {
-    IDENTIFIER(CodePos, String),
-    SYMBOL(CodePos, String),
-    KEYWORD(CodePos, String),
-    NUMBER(CodePos, String),
-    STRING(CodePos, String),
-    NEWLINE(CodePos),
-    EOF(CodePos),
+    IDENTIFIER(Span, String),
+    SYMBOL(Span, String),
+    KEYWORD(Span, String),
+    NUMBER(Span, String),
+    STRING(Span, String),
+    NEWLINE(Span),
+    EOF(Span),
 }
 
 impl Display for Lexeme {
@@ -37,7 +39,7 @@ impl Display for Lexeme {
 
 fn build_identifier(col: u64, row: u64, word: &String, is_number: bool, is_string: bool) -> Lexeme {
     let word_length = word.len() as u64;
-    let pos = CodePos { col: col - word_length as u64, row };
+    let pos = Span { col: col - word_length as u64, row, length: word_length };
     if is_number {
         Lexeme::NUMBER(pos, word.clone())
     } else if is_string {
@@ -64,6 +66,7 @@ pub fn lex(code: String) -> Vec<Lexeme> {
             skip = false;
         } else {
             match c {
+                '\r' => (),
                 '\n' if !is_string => {
                     if !word.is_empty() {
                         vec.push(build_identifier(col, row, &word, is_number, is_string));
@@ -72,7 +75,7 @@ pub fn lex(code: String) -> Vec<Lexeme> {
                         None => (),
                         Some(last) => {
                             if !matches!(last, Lexeme::NEWLINE(_)) {
-                                vec.push(Lexeme::NEWLINE(CodePos { col, row }));
+                                vec.push(Lexeme::NEWLINE(Span { col, row, length: 1 }));
                             }
                         }
                     }
@@ -131,7 +134,7 @@ pub fn lex(code: String) -> Vec<Lexeme> {
                         }
                     }
 
-                    vec.push(Lexeme::SYMBOL(CodePos { col, row }, symbol));
+                    vec.push(Lexeme::SYMBOL(Span { col, row, length: symbol.len() as u64 }, symbol));
                 }
                 '0'..='9'  if !is_string => {
                     if word.is_empty() {
@@ -156,6 +159,6 @@ pub fn lex(code: String) -> Vec<Lexeme> {
         }
     );
 
-    vec.push(Lexeme::EOF(CodePos { col, row }));
+    vec.push(Lexeme::EOF(Span { col, row, length: 0 }));
     vec
 }
