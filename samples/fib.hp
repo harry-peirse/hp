@@ -1,0 +1,6 @@
+main :: {
+    print("Hello World")
+    print(fib(5))
+}
+
+fib :: (num: i64) => return num <= 1 ? num : fib(num - 1) + fib(num - 2)
