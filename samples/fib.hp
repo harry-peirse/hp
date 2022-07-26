@@ -3,4 +3,4 @@ main :: {
     print(fib(5))
 }
 
-fib :: (num: i64) => return num <= 1 ? num : fib(num - 1) + fib(num - 2)
+fib :: (num: i64) => if num <= 1 then num else fib(num - 1) + fib(num - 2)

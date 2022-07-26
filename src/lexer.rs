@@ -14,25 +14,25 @@ impl Display for Span {
 }
 
 pub enum Lexeme {
-    IDENTIFIER(Span, String),
-    SYMBOL(Span, String),
-    KEYWORD(Span, String),
-    NUMBER(Span, String),
-    STRING(Span, String),
-    NEWLINE(Span),
-    EOF(Span),
+    Identifier(Span, String),
+    Symbol(Span, String),
+    Keyword(Span, String),
+    Number(Span, String),
+    String(Span, String),
+    Newline(Span),
+    Eof(Span),
 }
 
 impl Display for Lexeme {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            Lexeme::EOF(pos) => write!(f, "{} EOF", pos),
-            Lexeme::NEWLINE(pos) => write!(f, "{} LINE", pos),
-            Lexeme::IDENTIFIER(pos, id) => write!(f, "{} ID   {}", pos, id),
-            Lexeme::SYMBOL(pos, id) => write!(f, "{} SYM  {}", pos, id),
-            Lexeme::NUMBER(pos, id) => write!(f, "{} NUM  {}", pos, id),
-            Lexeme::STRING(pos, id) => write!(f, "{} STR  {}", pos, id),
-            Lexeme::KEYWORD(pos, id) => write!(f, "{} KEY  {}", pos, id)
+            Lexeme::Eof(pos) => write!(f, "{} EOF", pos),
+            Lexeme::Newline(pos) => write!(f, "{} LINE", pos),
+            Lexeme::Identifier(pos, id) => write!(f, "{} ID   {}", pos, id),
+            Lexeme::Symbol(pos, id) => write!(f, "{} SYM  {}", pos, id),
+            Lexeme::Number(pos, id) => write!(f, "{} NUM  {}", pos, id),
+            Lexeme::String(pos, id) => write!(f, "{} STR  {}", pos, id),
+            Lexeme::Keyword(pos, id) => write!(f, "{} KEY  {}", pos, id)
         }
     }
 }
@@ -41,13 +41,13 @@ fn build_identifier(col: u64, row: u64, word: &String, is_number: bool, is_strin
     let word_length = word.len() as u64;
     let pos = Span { col: col - word_length as u64, row, length: word_length };
     if is_number {
-        Lexeme::NUMBER(pos, word.clone())
+        Lexeme::Number(pos, word.clone())
     } else if is_string {
-        Lexeme::STRING(pos, word.clone())
-    } else if ["and", "or", "is", "it", "true", "false", "loop", "if"].contains(&&**word) {
-        Lexeme::KEYWORD(pos, word.clone())
+        Lexeme::String(pos, word.clone())
+    } else if ["if", "then", "else"].contains(&&**word) {
+        Lexeme::Keyword(pos, word.clone())
     } else {
-        Lexeme::IDENTIFIER(pos, word.clone())
+        Lexeme::Identifier(pos, word.clone())
     }
 }
 
@@ -74,8 +74,8 @@ pub fn lex(code: String) -> Vec<Lexeme> {
                     match vec.last() {
                         None => (),
                         Some(last) => {
-                            if !matches!(last, Lexeme::NEWLINE(_)) {
-                                vec.push(Lexeme::NEWLINE(Span { col, row, length: 1 }));
+                            if !matches!(last, Lexeme::Newline(_)) {
+                                vec.push(Lexeme::Newline(Span { col, row, length: 1 }));
                             }
                         }
                     }
@@ -134,7 +134,7 @@ pub fn lex(code: String) -> Vec<Lexeme> {
                         }
                     }
 
-                    vec.push(Lexeme::SYMBOL(Span { col, row, length: symbol.len() as u64 }, symbol));
+                    vec.push(Lexeme::Symbol(Span { col, row, length: symbol.len() as u64 }, symbol));
                 }
                 '0'..='9'  if !is_string => {
                     if word.is_empty() {
@@ -159,6 +159,6 @@ pub fn lex(code: String) -> Vec<Lexeme> {
         }
     );
 
-    vec.push(Lexeme::EOF(Span { col, row, length: 0 }));
+    vec.push(Lexeme::Eof(Span { col, row, length: 0 }));
     vec
 }
