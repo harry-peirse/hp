@@ -4,3 +4,4 @@ main :: {
 }
 
 fib :: (num: i64) => if num <= 1 then num else fib(num - 1) + fib(num - 2)
+

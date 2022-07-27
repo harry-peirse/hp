@@ -7,10 +7,10 @@ use crate::lexer::Lexeme;
 
 #[derive(Debug)]
 pub struct Function {
-    name: String,
-    args: Vec<Argument>,
-    return_type_name: Option<String>,
-    block: Vec<Expression>,
+    pub name: String,
+    pub args: Vec<Argument>,
+    pub return_type_name: Option<String>,
+    pub block: Vec<Expression>,
 }
 
 impl Display for Function {
@@ -21,37 +21,66 @@ impl Display for Function {
 
 #[derive(Debug)]
 pub struct Argument {
-    name: String,
-    type_name: String,
+    pub name: String,
+    pub type_name: String,
 }
 
 #[derive(Debug)]
 pub enum Expression {
     Call(String, Box<Vec<Expression>>),
+    Wrapped(Box<Expression>),
     LiteralString(String),
     LiteralNumber(String),
     Return(Option<Box<Expression>>),
     If(Box<Expression>, Box<Vec<Expression>>, Box<Vec<Expression>>),
     Variable(String),
-    BinaryOp(Box<Expression>, BinaryOp, Box<Expression>),
+    Binary(Box<Expression>, BinaryOp, Box<Expression>),
+    Unary(UnaryOp, Box<Expression>),
+}
+
+#[derive(Debug)]
+pub enum UnaryOp {
+    Plus,
+    Minus,
+    Not,
 }
 
 #[derive(Debug)]
 pub enum BinaryOp {
     Plus,
     Minus,
-    // Multiply,
-    // Divide,
-    // And,
-    // Or,
-    // Lt,
-    // Gt,
+    Multiply,
+    Divide,
+    And,
+    Or,
+    Lt,
+    Gt,
     Lte,
-    // Gte,
-    // Equals,
-    // NotEquals,
-    // Assign,
-    // Dot
+    Gte,
+    Equals,
+    NotEquals,
+    Assign,
+    Dot,
+}
+
+// These values are arbitrary, and only matter in directional comparison to each other
+fn binary_op_precedence(op: &BinaryOp) -> u32 {
+    match op {
+        BinaryOp::Assign => 10,
+        BinaryOp::Or => 20,
+        BinaryOp::And => 30,
+        BinaryOp::Equals => 40,
+        BinaryOp::NotEquals => 40,
+        BinaryOp::Lt => 50,
+        BinaryOp::Gt => 50,
+        BinaryOp::Lte => 50,
+        BinaryOp::Gte => 50,
+        BinaryOp::Plus => 60,
+        BinaryOp::Minus => 60,
+        BinaryOp::Multiply => 70,
+        BinaryOp::Divide => 70,
+        BinaryOp::Dot => 80
+    }
 }
 
 pub fn parse(lexemes: Vec<Lexeme>) -> Result<Vec<Function>, Box<dyn Error>> {
@@ -130,14 +159,25 @@ fn parse_argument(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Argument, Box<dyn
     Ok(Argument { name, type_name })
 }
 
-// TODO(harry): Handle operator precedence (note that current behaviour evaluated in the _reverse_ order of how it is written in the input source code)
+// TODO(harry): This precedence work has a big bug. 1 * 2 + 3 < 4 is parsed incorrectly.
 fn parse_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box<dyn Error>> {
     let lhs = parse_non_binary_expression(iter)?;
     let binary_op = match iter.peek() {
         Some(Lexeme::Symbol(_, sym)) => match sym.as_str() {
             "+" => Some(BinaryOp::Plus),
             "-" => Some(BinaryOp::Minus),
+            "*" => Some(BinaryOp::Multiply),
+            "/" => Some(BinaryOp::Divide),
             "<=" => Some(BinaryOp::Lte),
+            ">=" => Some(BinaryOp::Gte),
+            "<" => Some(BinaryOp::Lt),
+            ">" => Some(BinaryOp::Gt),
+            "==" => Some(BinaryOp::Equals),
+            "!=" => Some(BinaryOp::NotEquals),
+            "=" => Some(BinaryOp::Assign),
+            "&&" => Some(BinaryOp::And),
+            "||" => Some(BinaryOp::Or),
+            "." => Some(BinaryOp::Dot),
             _ => None
         }
         _ => None
@@ -146,7 +186,12 @@ fn parse_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box
         Some(op) => {
             iter.next();
             let rhs = parse_expression(iter)?;
-            Expression::BinaryOp(Box::new(lhs), op, Box::new(rhs))
+            match rhs {
+                Expression::Binary(l, right_op, r)
+                if binary_op_precedence(&right_op) <= binary_op_precedence(&op) =>
+                    Expression::Binary(Box::new(Expression::Binary(Box::new(lhs), op, l)), right_op, r),
+                _ => Expression::Binary(Box::new(lhs), op, Box::new(rhs))
+            }
         }
         None => lhs
     })
@@ -186,6 +231,17 @@ fn parse_non_binary_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expr
             expect_keyword(iter, "else");
             let failure_case = parse_expression(iter)?;
             Ok(Expression::If(Box::new(condition), Box::new(vec!(success_case)), Box::new(vec!(failure_case))))
+        }
+        Some(Lexeme::Symbol(_, sym)) => match sym.as_str() {
+            "+" => Ok(Expression::Unary(UnaryOp::Plus, Box::new(parse_non_binary_expression(iter)?))),
+            "-" => Ok(Expression::Unary(UnaryOp::Minus, Box::new(parse_non_binary_expression(iter)?))),
+            "!" => Ok(Expression::Unary(UnaryOp::Not, Box::new(parse_non_binary_expression(iter)?))),
+            "(" => {
+                let result = parse_expression(iter)?;
+                expect_symbol(iter, ")");
+                Ok(Expression::Wrapped(Box::new(result)))
+            }
+            _ => panic!("Unexpected Symbol {}", sym)
         }
         Some(it) => panic!("Unsupported Operation {}", it),
         None => panic!("Token stream empty")

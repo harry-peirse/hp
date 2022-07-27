@@ -11,7 +11,7 @@ mod parser;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut code = String::new();
-    File::open(Path::new("./samples/fib.hp"))?.read_to_string(&mut code)?;
+    File::open(Path::new("./samples/ooo.hp"))?.read_to_string(&mut code)?;
 
     println!("Code");
     println!("{}", code);
