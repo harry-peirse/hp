@@ -25,7 +25,7 @@ pub struct Argument {
     pub type_name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
     Call(String, Box<Vec<Expression>>),
     Wrapped(Box<Expression>),
@@ -38,14 +38,14 @@ pub enum Expression {
     Unary(UnaryOp, Box<Expression>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnaryOp {
     Plus,
     Minus,
     Not,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinaryOp {
     Plus,
     Minus,
@@ -161,40 +161,52 @@ fn parse_argument(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Argument, Box<dyn
 
 // TODO(harry): This precedence work has a big bug. 1 * 2 + 3 < 4 is parsed incorrectly.
 fn parse_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box<dyn Error>> {
-    let lhs = parse_non_binary_expression(iter)?;
-    let binary_op = match iter.peek() {
-        Some(Lexeme::Symbol(_, sym)) => match sym.as_str() {
-            "+" => Some(BinaryOp::Plus),
-            "-" => Some(BinaryOp::Minus),
-            "*" => Some(BinaryOp::Multiply),
-            "/" => Some(BinaryOp::Divide),
-            "<=" => Some(BinaryOp::Lte),
-            ">=" => Some(BinaryOp::Gte),
-            "<" => Some(BinaryOp::Lt),
-            ">" => Some(BinaryOp::Gt),
-            "==" => Some(BinaryOp::Equals),
-            "!=" => Some(BinaryOp::NotEquals),
-            "=" => Some(BinaryOp::Assign),
-            "&&" => Some(BinaryOp::And),
-            "||" => Some(BinaryOp::Or),
-            "." => Some(BinaryOp::Dot),
-            _ => None
-        }
-        _ => None
-    };
-    Ok(match binary_op {
-        Some(op) => {
-            iter.next();
-            let rhs = parse_expression(iter)?;
-            match rhs {
-                Expression::Binary(l, right_op, r)
-                if binary_op_precedence(&right_op) <= binary_op_precedence(&op) =>
-                    Expression::Binary(Box::new(Expression::Binary(Box::new(lhs), op, l)), right_op, r),
-                _ => Expression::Binary(Box::new(lhs), op, Box::new(rhs))
+    let mut expression: Expression = parse_non_binary_expression(iter)?;
+    loop {
+        let mut binary_op = match iter.peek() {
+            Some(Lexeme::Symbol(_, sym)) => match sym.as_str() {
+                "+" => Some(BinaryOp::Plus),
+                "-" => Some(BinaryOp::Minus),
+                "*" => Some(BinaryOp::Multiply),
+                "/" => Some(BinaryOp::Divide),
+                "<=" => Some(BinaryOp::Lte),
+                ">=" => Some(BinaryOp::Gte),
+                "<" => Some(BinaryOp::Lt),
+                ">" => Some(BinaryOp::Gt),
+                "==" => Some(BinaryOp::Equals),
+                "!=" => Some(BinaryOp::NotEquals),
+                "=" => Some(BinaryOp::Assign),
+                "&&" => Some(BinaryOp::And),
+                "||" => Some(BinaryOp::Or),
+                "." => Some(BinaryOp::Dot),
+                _ => None
             }
+            _ => None
+        };
+        if let Some(next_op) = binary_op {
+            iter.next();
+            let next = parse_non_binary_expression(iter)?;
+            let mut previous = &mut expression;
+            loop {
+                if let Expression::Binary(ref mut lhs, ref mut previous_op, ref mut rhs) = previous {
+                    if binary_op_precedence(&next_op) > binary_op_precedence(&previous_op) {
+                        previous = rhs;
+                    } else {
+                        *lhs = Box::new(Expression::Binary(Box::new(*lhs.clone()), previous_op.clone(), Box::new(*rhs.clone())));
+                        *previous_op = next_op.clone();
+                        *rhs = Box::new(next);
+                        break;
+                    }
+                } else {
+                    *previous = Expression::Binary(Box::new(previous.clone()), next_op, Box::new(next));
+                    break;
+                }
+            }
+        } else {
+            break;
         }
-        None => lhs
-    })
+    }
+    Ok(expression)
 }
 
 fn parse_non_binary_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box<dyn Error>> {
