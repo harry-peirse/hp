@@ -114,7 +114,7 @@ pub fn lex(code: String) -> Vec<Lexeme> {
                         is_string = false;
                     }
                 }
-                '{' | '}' | '(' | ')' | '[' | ']' | '+' | '-' | '*' | '/' | '=' | '<' | '>' | '!' | ':' | '|' | '&' | ',' | '.'  if !is_string => {
+                '{' | '}' | '(' | ')' | '[' | ']' | '+' | '-' | '*' | '/' | '=' | '<' | '>' | '!' | ':' | '|' | '&' | ',' | '.' | ';' if !is_string => {
                     if !word.is_empty() {
                         vec.push(build_identifier(col, row, &word, is_number, is_string));
                         word = "".to_string();

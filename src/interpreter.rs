@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 
-use crate::parser::{BinaryOp, Expression, Function};
+use crate::parser::{BinaryOp, Expression, Function, UnaryOp};
 
 pub fn interpret(ast: Vec<Function>) -> Result<(), Box<dyn Error>> {
     if let Some(main) = ast.iter().find(|fun| fun.name == "main") {
@@ -33,9 +33,15 @@ fn eval(expression: &Expression, functions: &Vec<Function>, memory: &HashMap<Str
     match expression {
         Expression::LiteralString(string) => Ok(string.to_string()),
         Expression::LiteralNumber(value) => Ok(value.to_string()),
+        Expression::Wrapped(nested) => eval(&*nested, &functions, &memory),
+        Expression::Unary(op, expression) => match op {
+            UnaryOp::Plus => eval(&expression, &functions, &memory),
+            UnaryOp::Minus => Ok((-((eval(&expression, &functions, &memory)?).parse::<f64>()?)).to_string()),
+            UnaryOp::Not => if ["false", "0", "void", ""].contains(&eval(&expression, &functions, &memory)?.as_str()) { Ok("true".to_string()) } else { Ok("false".to_string()) },
+        }
         Expression::If(condition, success, failure) => {
             let result = eval(&condition, &functions, &memory)?;
-            if ["void", "false", "0"].contains(&result.as_str()) {
+            if ["void", "false", "0", ""].contains(&result.as_str()) {
                 if let Some(result) = failure.iter().map(|expression| eval(&expression, &functions, &memory)).last() {
                     result
                 } else {
@@ -66,12 +72,6 @@ fn eval(expression: &Expression, functions: &Vec<Function>, memory: &HashMap<Str
             } else {
                 panic!("Couldn't find variable in memory {}", value)
             }
-        Expression::Return(expression) =>
-            if let (Some(expression)) = expression {
-                eval(&expression, &functions, &memory)
-            } else {
-                Ok("void".to_string())
-            }
         Expression::Call(function_name, args) =>
             if let Some(function) = functions.iter().find(|fun| fun.name.to_string() == function_name.to_string()) {
                 call(&function, &args, &functions, memory)
@@ -86,6 +86,5 @@ fn eval(expression: &Expression, functions: &Vec<Function>, memory: &HashMap<Str
                     _ => panic!("Couldn't resolve function {}", function_name)
                 }
             }
-        _ => panic!("Not yet implemented! {:?}", expression)
     }
 }

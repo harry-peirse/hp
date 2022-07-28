@@ -31,7 +31,6 @@ pub enum Expression {
     Wrapped(Box<Expression>),
     LiteralString(String),
     LiteralNumber(String),
-    Return(Option<Box<Expression>>),
     If(Box<Expression>, Box<Vec<Expression>>, Box<Vec<Expression>>),
     Variable(String),
     Binary(Box<Expression>, BinaryOp, Box<Expression>),
@@ -94,7 +93,6 @@ pub fn parse(lexemes: Vec<Lexeme>) -> Result<Vec<Function>, Box<dyn Error>> {
                 match token {
                     Lexeme::Newline(_) | Lexeme::Eof(_) => {
                         iter.next();
-                        next = iter.peek();
                     }
                     _ => {
                         vec.push(parse_function(&mut iter)?)
@@ -163,7 +161,7 @@ fn parse_argument(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Argument, Box<dyn
 fn parse_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box<dyn Error>> {
     let mut expression: Expression = parse_non_binary_expression(iter)?;
     loop {
-        let mut binary_op = match iter.peek() {
+        let binary_op = match iter.peek() {
             Some(Lexeme::Symbol(_, sym)) => match sym.as_str() {
                 "+" => Some(BinaryOp::Plus),
                 "-" => Some(BinaryOp::Minus),
