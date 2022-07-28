@@ -5,13 +5,15 @@ use std::path::Path;
 
 use lexer::lex;
 use parser::parse;
+use interpreter::interpret;
 
 mod lexer;
 mod parser;
+mod interpreter;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut code = String::new();
-    File::open(Path::new("./samples/ooo.hp"))?.read_to_string(&mut code)?;
+    File::open(Path::new("./samples/fib.hp"))?.read_to_string(&mut code)?;
 
     println!("Code");
     println!("{}", code);
@@ -25,6 +27,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("\nAST");
     println!("{}", ast.iter().map(|it| it.to_string()).collect::<Vec<String>>().join("\n"));
+
+    println!("\nInterpreting...");
+    interpret(ast)?;
 
     Ok(())
 }
