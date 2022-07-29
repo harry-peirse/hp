@@ -3,7 +3,7 @@ use std::error::Error;
 
 use crate::parser::{BinaryOp, Expression, Function, UnaryOp};
 
-pub fn interpret(ast: Vec<Function>) -> Result<(), Box<dyn Error>> {
+pub fn interpret(ast: &Vec<Function>) -> Result<(), Box<dyn Error>> {
     if let Some(main) = ast.iter().find(|fun| fun.name == "main") {
         call(main, &vec!(), &ast, &HashMap::new())?;
     } else {
