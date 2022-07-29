@@ -64,6 +64,8 @@ fn eval(expression: &Expression, functions: &Vec<Function>, memory: &HashMap<Str
             BinaryOp::Gte => Ok((eval(&*lhs, &functions, &memory)?.parse::<f64>()? >= eval(&*rhs, &functions, &memory)?.parse::<f64>()?).to_string()),
             BinaryOp::Lt => Ok((eval(&*lhs, &functions, &memory)?.parse::<f64>()? < eval(&*rhs, &functions, &memory)?.parse::<f64>()?).to_string()),
             BinaryOp::Gt => Ok((eval(&*lhs, &functions, &memory)?.parse::<f64>()? > eval(&*rhs, &functions, &memory)?.parse::<f64>()?).to_string()),
+            BinaryOp::NotEquals => Ok((eval(&*lhs, &functions, &memory)? != eval(&*rhs, &functions, &memory)?).to_string()),
+            BinaryOp::Equals => Ok((eval(&*lhs, &functions, &memory)? == eval(&*rhs, &functions, &memory)?).to_string()),
             _ => panic!("Binary Op not yet implemented {:?}", op)
         }
         Expression::Variable(value) =>

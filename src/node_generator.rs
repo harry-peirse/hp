@@ -1,8 +1,4 @@
-use std::collections::HashMap;
-use std::error::Error;
-
-use crate::parse;
-use crate::parser::{Argument, BinaryOp, Expression, Function, UnaryOp};
+use crate::parser::{BinaryOp, Expression, Function, UnaryOp};
 
 pub fn generate_node(ast: &Vec<Function>) -> String {
     let functions = ast.iter().map(generate_function).collect::<Vec<String>>().join("\n\n");
@@ -23,8 +19,7 @@ fn generate_block(block: &Vec<Expression>, depth: usize) -> String {
         .filter(|(i, _)| i.clone() < block.len() - 1)
         .map(|(i, f)| generate_expression(f, depth))
         .map(|s| format!("\n{}{};", "  ".repeat(depth), s))
-        .collect::<Vec<String>>()
-        .join("\n");
+        .collect::<String>();
 
     return if let Some(expr) = block.last() {
         format!("{}\n{}return {};\n", result, "  ".repeat(depth), generate_expression(expr, depth))
@@ -40,15 +35,21 @@ fn generate_expression(expr: &Expression, depth: usize) -> String {
         Expression::LiteralNumber(value) => value.clone(),
         Expression::LiteralString(value) => format!("\"{}\"", value.clone()),
         Expression::Wrapped(expr) => format!("({})", generate_expression(expr, depth)),
-        Expression::Unary(op, expr) => format!("{}{}", get_unary_op(op), generate_expression(expr, depth)),
-        Expression::Binary(lhs, op, rhs) => format!("({} {} {})", generate_expression(lhs, depth), get_binary_op(op), generate_expression(rhs, depth)),
+        Expression::Unary(op, expr) =>
+            format!("{}{}",
+                    get_unary_op(op),
+                    generate_expression(expr, depth)),
+        Expression::Binary(lhs, op, rhs) =>
+            format!("({} {} {})",
+                    generate_expression(lhs, depth),
+                    get_binary_op(op),
+                    generate_expression(rhs, depth)),
         Expression::If(condition, success, failure) =>
             format!("({}) ? (() => {{{}{depth}}})() : (() => {{{}{depth}}})()",
                     generate_expression(condition, depth),
                     generate_block(success, depth + 1),
                     generate_block(failure, depth + 1),
-                    depth = "  ".repeat(depth)),
-        _ => "_Unsupported_".to_string()
+                    depth = "  ".repeat(depth))
     }
 }
 
