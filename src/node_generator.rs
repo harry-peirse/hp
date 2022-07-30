@@ -21,16 +21,25 @@ fn generate_block(block: &Vec<Expression>, depth: usize) -> String {
         .map(|s| format!("\n{}{};", "  ".repeat(depth), s))
         .collect::<String>();
 
-    return if let Some(expr) = block.last() {
-        format!("{}\n{}return {};\n", result, "  ".repeat(depth), generate_expression(expr, depth))
-    } else {
-        format!(" ")
-    };
+    match block.last() {
+        Some(Expression::Declare(name, expr)) =>
+            format!("{}\n{}{}\n{}return {};\n",
+                    result,
+                    "  ".repeat(depth),
+                    generate_expression(&Expression::Declare(name.clone(), Box::new(*expr.clone())), depth),
+                    "  ".repeat(depth),
+                    name),
+        Some(expr) => format!("{}\n{}return {};\n", result, "  ".repeat(depth), generate_expression(expr, depth)),
+        _ => format!(" ")
+    }
 }
 
 fn generate_expression(expr: &Expression, depth: usize) -> String {
     match expr {
-        Expression::Call(name, args) => format!("{}({})", name, args.iter().map(|it| generate_expression(it, depth)).collect::<String>()),
+        Expression::Call(name, args) => format!("{}({})", name, args.iter()
+            .map(|it| generate_block(&vec!(it.clone()), depth + 1))
+            .map(|it| format!("(() => {{{}}})()", it))
+            .collect::<String>()),
         Expression::Variable(name) => name.clone(),
         Expression::LiteralNumber(value) => value.clone(),
         Expression::LiteralString(value) => format!("\"{}\"", value.clone()),
@@ -49,7 +58,9 @@ fn generate_expression(expr: &Expression, depth: usize) -> String {
                     generate_expression(condition, depth),
                     generate_block(success, depth + 1),
                     generate_block(failure, depth + 1),
-                    depth = "  ".repeat(depth))
+                    depth = "  ".repeat(depth)),
+        Expression::Declare(name, expr) =>
+            format!("var {} = {}", name, generate_expression(expr, depth))
     }
 }
 

@@ -28,8 +28,9 @@ fn prep() -> Result<(), Box<dyn Error>> {
 
 fn main() -> Result<(), Box<dyn Error>> {
     prep()?;
-    run_pipeline("./samples/fib.hp")?;
-    run_pipeline("./samples/ooo.hp")?;
+    // run_pipeline("./samples/fib.hp")?;
+    // run_pipeline("./samples/ooo.hp")?;
+    run_pipeline("./samples/test.hp")?;
     Ok(())
 }
 
@@ -40,7 +41,7 @@ fn run_pipeline(filename: &str) -> Result<(), Box<dyn Error>> {
     println!("Code");
     println!("{}", code);
 
-    let vec = lex(code.to_string());
+    let vec = lex(code.to_string())?;
 
     println!("\nLexemes");
     println!("{}", vec.iter().map(|it| it.to_string()).collect::<Vec<String>>().join("\n"));

@@ -5,7 +5,7 @@ use crate::parser::{BinaryOp, Expression, Function, UnaryOp};
 
 pub fn interpret(ast: &Vec<Function>) -> Result<(), Box<dyn Error>> {
     if let Some(main) = ast.iter().find(|fun| fun.name == "main") {
-        call(main, &vec!(), &ast, &HashMap::new())?;
+        call(main, &vec!(), &ast, &mut HashMap::new())?;
     } else {
         println!("No main function!")
     }
@@ -13,7 +13,7 @@ pub fn interpret(ast: &Vec<Function>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn call(fun: &Function, args: &Vec<Expression>, functions: &Vec<Function>, previous_memory: &HashMap<String, String>) -> Result<String, Box<dyn Error>> {
+fn call(fun: &Function, args: &Vec<Expression>, functions: &Vec<Function>, previous_memory: &mut HashMap<String, String>) -> Result<String, Box<dyn Error>> {
     let mut memory = HashMap::new();
     for (i, arg) in fun.args.iter().enumerate() {
         if let Some(expr) = args.get(i) {
@@ -22,50 +22,55 @@ fn call(fun: &Function, args: &Vec<Expression>, functions: &Vec<Function>, previ
             panic!("Missing argument {}", arg.name)
         }
     }
-    return if let Some(result) = fun.block.iter().map(|expression| eval(&expression, &functions, &memory)).last() {
+    return if let Some(result) = fun.block.iter().map(|expression| eval(expression, functions, &mut memory)).last() {
         result
     } else {
         Ok("void".to_string())
     };
 }
 
-fn eval(expression: &Expression, functions: &Vec<Function>, memory: &HashMap<String, String>) -> Result<String, Box<dyn Error>> {
+fn eval(expression: &Expression, functions: &Vec<Function>, memory: &mut HashMap<String, String>) -> Result<String, Box<dyn Error>> {
     match expression {
         Expression::LiteralString(string) => Ok(string.to_string()),
         Expression::LiteralNumber(value) => Ok(value.to_string()),
-        Expression::Wrapped(nested) => eval(&*nested, &functions, &memory),
+        Expression::Wrapped(nested) => eval(&*nested, &functions, memory),
         Expression::Unary(op, expression) => match op {
-            UnaryOp::Plus => eval(&expression, &functions, &memory),
-            UnaryOp::Minus => Ok((-((eval(&expression, &functions, &memory)?).parse::<f64>()?)).to_string()),
-            UnaryOp::Not => if ["false", "0", "void", ""].contains(&eval(&expression, &functions, &memory)?.as_str()) { Ok("true".to_string()) } else { Ok("false".to_string()) },
+            UnaryOp::Plus => eval(expression, functions, memory),
+            UnaryOp::Minus => Ok((-((eval(expression, functions, memory)?).parse::<f64>()?)).to_string()),
+            UnaryOp::Not => if ["false", "0", "void", ""].contains(&eval(&expression, &functions, memory)?.as_str()) { Ok("true".to_string()) } else { Ok("false".to_string()) },
         }
         Expression::If(condition, success, failure) => {
-            let result = eval(&condition, &functions, &memory)?;
+            let result = eval(condition, functions, memory)?;
             if ["void", "false", "0", ""].contains(&result.as_str()) {
-                if let Some(result) = failure.iter().map(|expression| eval(&expression, &functions, &memory)).last() {
+                if let Some(result) = failure.iter().map(|expression| eval(expression, functions, memory)).last() {
                     result
                 } else {
                     Ok("void".to_string())
                 }
             } else {
-                if let Some(result) = success.iter().map(|expression| eval(&expression, &functions, &memory)).last() {
+                if let Some(result) = success.iter().map(|expression| eval(expression, functions, memory)).last() {
                     result
                 } else {
                     Ok("void".to_string())
                 }
             }
         }
+        Expression::Declare(name, expr) => {
+            let result = eval(expr, functions, memory)?;
+            memory.insert(name.clone(), result.clone());
+            Ok(result)
+        }
         Expression::Binary(lhs, op, rhs) => match op {
-            BinaryOp::Plus => Ok((eval(&*lhs, &functions, &memory)?.parse::<f64>()? + eval(&*rhs, &functions, &memory)?.parse::<f64>()?).to_string()),
-            BinaryOp::Minus => Ok((eval(&*lhs, &functions, &memory)?.parse::<f64>()? - eval(&*rhs, &functions, &memory)?.parse::<f64>()?).to_string()),
-            BinaryOp::Multiply => Ok((eval(&*lhs, &functions, &memory)?.parse::<f64>()? * eval(&*rhs, &functions, &memory)?.parse::<f64>()?).to_string()),
-            BinaryOp::Divide => Ok((eval(&*lhs, &functions, &memory)?.parse::<f64>()? / eval(&*rhs, &functions, &memory)?.parse::<f64>()?).to_string()),
-            BinaryOp::Lte => Ok((eval(&*lhs, &functions, &memory)?.parse::<f64>()? <= eval(&*rhs, &functions, &memory)?.parse::<f64>()?).to_string()),
-            BinaryOp::Gte => Ok((eval(&*lhs, &functions, &memory)?.parse::<f64>()? >= eval(&*rhs, &functions, &memory)?.parse::<f64>()?).to_string()),
-            BinaryOp::Lt => Ok((eval(&*lhs, &functions, &memory)?.parse::<f64>()? < eval(&*rhs, &functions, &memory)?.parse::<f64>()?).to_string()),
-            BinaryOp::Gt => Ok((eval(&*lhs, &functions, &memory)?.parse::<f64>()? > eval(&*rhs, &functions, &memory)?.parse::<f64>()?).to_string()),
-            BinaryOp::NotEquals => Ok((eval(&*lhs, &functions, &memory)? != eval(&*rhs, &functions, &memory)?).to_string()),
-            BinaryOp::Equals => Ok((eval(&*lhs, &functions, &memory)? == eval(&*rhs, &functions, &memory)?).to_string()),
+            BinaryOp::Plus => Ok((eval(&*lhs, &functions, memory)?.parse::<f64>()? + eval(&*rhs, functions, memory)?.parse::<f64>()?).to_string()),
+            BinaryOp::Minus => Ok((eval(&*lhs, &functions, memory)?.parse::<f64>()? - eval(&*rhs, &functions, memory)?.parse::<f64>()?).to_string()),
+            BinaryOp::Multiply => Ok((eval(&*lhs, &functions, memory)?.parse::<f64>()? * eval(&*rhs, &functions, memory)?.parse::<f64>()?).to_string()),
+            BinaryOp::Divide => Ok((eval(&*lhs, &functions, memory)?.parse::<f64>()? / eval(&*rhs, &functions, memory)?.parse::<f64>()?).to_string()),
+            BinaryOp::Lte => Ok((eval(&*lhs, &functions, memory)?.parse::<f64>()? <= eval(&*rhs, &functions, memory)?.parse::<f64>()?).to_string()),
+            BinaryOp::Gte => Ok((eval(&*lhs, &functions, memory)?.parse::<f64>()? >= eval(&*rhs, &functions, memory)?.parse::<f64>()?).to_string()),
+            BinaryOp::Lt => Ok((eval(&*lhs, &functions, memory)?.parse::<f64>()? < eval(&*rhs, &functions, memory)?.parse::<f64>()?).to_string()),
+            BinaryOp::Gt => Ok((eval(&*lhs, &functions, memory)?.parse::<f64>()? > eval(&*rhs, &functions, memory)?.parse::<f64>()?).to_string()),
+            BinaryOp::NotEquals => Ok((eval(&*lhs, &functions, memory)? != eval(&*rhs, &functions, memory)?).to_string()),
+            BinaryOp::Equals => Ok((eval(&*lhs, &functions, memory)? == eval(&*rhs, &functions, memory)?).to_string()),
             _ => panic!("Binary Op not yet implemented {:?}", op)
         }
         Expression::Variable(value) =>
@@ -80,7 +85,7 @@ fn eval(expression: &Expression, functions: &Vec<Function>, memory: &HashMap<Str
             } else {
                 match function_name.as_str() {
                     "print" => if let Some(arg1) = args.first() {
-                        println!("{}", eval(&arg1, &functions, &memory)?);
+                        println!("{}", eval(&arg1, &functions, memory)?);
                         Ok("void".to_string())
                     } else {
                         panic!("Incorrect function call for print")

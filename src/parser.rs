@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::iter::Peekable;
 use std::slice::Iter;
 
-use crate::lexer::Lexeme;
+use crate::lexer::{Keyword, Lexeme, Symbol};
 
 #[derive(Debug)]
 pub struct Function {
@@ -35,6 +35,7 @@ pub enum Expression {
     Variable(String),
     Binary(Box<Expression>, BinaryOp, Box<Expression>),
     Unary(UnaryOp, Box<Expression>),
+    Declare(String, Box<Expression>)
 }
 
 #[derive(Debug, Clone)]
@@ -110,37 +111,37 @@ pub fn parse(lexemes: Vec<Lexeme>) -> Result<Vec<Function>, Box<dyn Error>> {
 fn parse_function(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Function, Box<dyn Error>> {
     let name = expect_identifier(iter)?;
 
-    expect_symbol(iter, "::");
+    expect_symbol(iter, Symbol::DoubleColon);
     skip_newline(iter);
 
     let mut args = vec!();
-    let has_args = is_symbol(iter, "(");
+    let has_args = is_symbol(iter, Symbol::OpenBracket);
     if has_args {
-        expect_symbol(iter, "(");
-        while !is_symbol(iter, ")") {
+        expect_symbol(iter, Symbol::OpenBracket);
+        while !is_symbol(iter, Symbol::CloseBracket) {
             args.push(parse_argument(iter)?);
-            if !is_symbol(iter, ")") {
-                expect_symbol(iter, ",")
+            if !is_symbol(iter, Symbol::CloseBracket) {
+                expect_symbol(iter, Symbol::Comma)
             }
         }
-        expect_symbol(iter, ")");
+        expect_symbol(iter, Symbol::CloseBracket);
     }
 
-    let is_block = is_symbol(iter, "{");
+    let is_block = is_symbol(iter, Symbol::OpenBrace);
 
     let mut block = vec!();
     if is_block {
-        expect_symbol(iter, "{");
+        expect_symbol(iter, Symbol::OpenBrace);
         skip_newline(iter);
 
-        while !is_symbol(iter, "}") {
+        while !is_symbol(iter, Symbol::CloseBrace) {
             block.push(parse_expression(iter)?);
             skip_newline(iter);
         }
-        expect_symbol(iter, "}");
+        expect_symbol(iter, Symbol::CloseBrace);
         skip_newline(iter);
     } else {
-        expect_symbol(iter, "=>");
+        expect_symbol(iter, Symbol::EqualsRightArrow);
         skip_newline(iter);
 
         block.push(parse_expression(iter)?);
@@ -152,7 +153,7 @@ fn parse_function(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Function, Box<dyn
 
 fn parse_argument(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Argument, Box<dyn Error>> {
     let name = expect_identifier(iter)?;
-    expect_symbol(iter, ":");
+    expect_symbol(iter, Symbol::Colon);
     let type_name = expect_identifier(iter)?;
     Ok(Argument { name, type_name })
 }
@@ -162,21 +163,21 @@ fn parse_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box
     let mut expression: Expression = parse_non_binary_expression(iter)?;
     loop {
         let binary_op = match iter.peek() {
-            Some(Lexeme::Symbol(_, sym)) => match sym.as_str() {
-                "+" => Some(BinaryOp::Plus),
-                "-" => Some(BinaryOp::Minus),
-                "*" => Some(BinaryOp::Multiply),
-                "/" => Some(BinaryOp::Divide),
-                "<=" => Some(BinaryOp::Lte),
-                ">=" => Some(BinaryOp::Gte),
-                "<" => Some(BinaryOp::Lt),
-                ">" => Some(BinaryOp::Gt),
-                "==" => Some(BinaryOp::Equals),
-                "!=" => Some(BinaryOp::NotEquals),
-                "=" => Some(BinaryOp::Assign),
-                "&&" => Some(BinaryOp::And),
-                "||" => Some(BinaryOp::Or),
-                "." => Some(BinaryOp::Dot),
+            Some(Lexeme::Symbol(_, sym)) => match sym {
+                Symbol::Plus => Some(BinaryOp::Plus),
+                Symbol::Dash => Some(BinaryOp::Minus),
+                Symbol::Asterisk => Some(BinaryOp::Multiply),
+                Symbol::ForwardSlash => Some(BinaryOp::Divide),
+                Symbol::LeftArrowEquals => Some(BinaryOp::Lte),
+                Symbol::RightArrowEquals => Some(BinaryOp::Gte),
+                Symbol::LeftArrow => Some(BinaryOp::Lt),
+                Symbol::RightArrow => Some(BinaryOp::Gt),
+                Symbol::DoubleEquals => Some(BinaryOp::Equals),
+                Symbol::BangEquals => Some(BinaryOp::NotEquals),
+                Symbol::Equals => Some(BinaryOp::Assign),
+                Symbol::DoubleAmpersand => Some(BinaryOp::And),
+                Symbol::DoubleBar => Some(BinaryOp::Or),
+                Symbol::Dot => Some(BinaryOp::Dot),
                 _ => None
             }
             _ => None
@@ -208,53 +209,58 @@ fn parse_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box
 }
 
 fn parse_non_binary_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box<dyn Error>> {
-    match iter.next() {
-        Some(Lexeme::String(_, value)) => Ok(Expression::LiteralString(value.clone())),
-        Some(Lexeme::Number(_, value)) => Ok(Expression::LiteralNumber(value.clone())),
-        Some(Lexeme::Identifier(_, identifier)) => {
-            match iter.peek() {
-                Some(Lexeme::Symbol(_, sym)) => {
-                    match &**sym {
-                        "(" => {
-                            // Function call
-                            iter.next();
-                            let mut args = vec!();
-                            while !is_symbol(iter, ")") {
-                                args.push(parse_expression(iter)?);
-                                if !is_symbol(iter, ")") {
-                                    expect_symbol(iter, ",")
+    if let Some(lexeme) = iter.next() {
+        Ok(match lexeme {
+            Lexeme::String(_, value) => Expression::LiteralString(value.clone()),
+            Lexeme::Number(_, value) => Expression::LiteralNumber(value.clone()),
+            Lexeme::Identifier(_, identifier) => {
+                match iter.peek() {
+                    Some(Lexeme::Symbol(_, sym)) => {
+                        match sym {
+                            Symbol::OpenBracket => {
+                                // Function call
+                                iter.next();
+                                let mut args = vec!();
+                                while !is_symbol(iter, Symbol::CloseBracket) {
+                                    args.push(parse_expression(iter)?);
+                                    if !is_symbol(iter, Symbol::CloseBracket) {
+                                        expect_symbol(iter, Symbol::Comma)
+                                    }
                                 }
+                                expect_symbol(iter, Symbol::CloseBracket);
+                                Expression::Call(identifier.clone(), Box::new(args))
                             }
-                            expect_symbol(iter, ")");
-                            Ok(Expression::Call(identifier.clone(), Box::new(args)))
+                            _ => Expression::Variable(identifier.clone())
                         }
-                        _ => Ok(Expression::Variable(identifier.clone()))
                     }
+                    _ => Expression::Variable(identifier.clone())
                 }
-                _ => Ok(Expression::Variable(identifier.clone()))
             }
-        }
-        Some(Lexeme::Keyword(_, keyword)) if keyword == "if" => {
-            let condition = parse_expression(iter)?;
-            expect_keyword(iter, "then");
-            let success_case = parse_expression(iter)?;
-            expect_keyword(iter, "else");
-            let failure_case = parse_expression(iter)?;
-            Ok(Expression::If(Box::new(condition), Box::new(vec!(success_case)), Box::new(vec!(failure_case))))
-        }
-        Some(Lexeme::Symbol(_, sym)) => match sym.as_str() {
-            "+" => Ok(Expression::Unary(UnaryOp::Plus, Box::new(parse_non_binary_expression(iter)?))),
-            "-" => Ok(Expression::Unary(UnaryOp::Minus, Box::new(parse_non_binary_expression(iter)?))),
-            "!" => Ok(Expression::Unary(UnaryOp::Not, Box::new(parse_non_binary_expression(iter)?))),
-            "(" => {
+            Lexeme::Keyword(_, Keyword::If) => {
+                let condition = parse_expression(iter)?;
+                expect_keyword(iter, Keyword::Then);
+                let success_case = parse_expression(iter)?;
+                expect_keyword(iter, Keyword::Else);
+                let failure_case = parse_expression(iter)?;
+                Expression::If(Box::new(condition), Box::new(vec!(success_case)), Box::new(vec!(failure_case)))
+            }
+            Lexeme::Keyword(_, Keyword::Given) => {
+                let name = expect_identifier(iter)?;
+                expect_symbol(iter, Symbol::Equals);
+                Expression::Declare(name, Box::new(parse_expression(iter)?))
+            }
+            Lexeme::Symbol(_, Symbol::Plus) => Expression::Unary(UnaryOp::Plus, Box::new(parse_non_binary_expression(iter)?)),
+            Lexeme::Symbol(_, Symbol::Dash) => Expression::Unary(UnaryOp::Minus, Box::new(parse_non_binary_expression(iter)?)),
+            Lexeme::Symbol(_, Symbol::Bang) => Expression::Unary(UnaryOp::Not, Box::new(parse_non_binary_expression(iter)?)),
+            Lexeme::Symbol(_, Symbol::OpenBracket) => {
                 let result = parse_expression(iter)?;
-                expect_symbol(iter, ")");
-                Ok(Expression::Wrapped(Box::new(result)))
+                expect_symbol(iter, Symbol::CloseBracket);
+                Expression::Wrapped(Box::new(result))
             }
-            _ => panic!("Unexpected Symbol {}", sym)
-        }
-        Some(it) => panic!("Unsupported Operation {}", it),
-        None => panic!("Token stream empty")
+            it => panic!("Unsupported Operation {}", it)
+        })
+    } else {
+        panic!("Token stream empty")
     }
 }
 
@@ -273,17 +279,17 @@ fn expect_identifier(iter: &mut Peekable<Iter<Lexeme>>) -> Result<String, Box<dy
     }
 }
 
-fn expect_symbol(iter: &mut Peekable<Iter<Lexeme>>, token: &str) {
+fn expect_symbol(iter: &mut Peekable<Iter<Lexeme>>, sym: Symbol) {
     match iter.next() {
-        Some(Lexeme::Symbol(_, it)) if it == token => (),
-        _ => panic!("Expected {} but it was missing", token)
+        Some(Lexeme::Symbol(_, it)) if sym == *it => (),
+        _ => panic!("Expected {} but it was missing", sym)
     };
 }
 
-fn expect_keyword(iter: &mut Peekable<Iter<Lexeme>>, token: &str) {
+fn expect_keyword(iter: &mut Peekable<Iter<Lexeme>>, keyword: Keyword) {
     match iter.next() {
-        Some(Lexeme::Keyword(_, it)) if it == token => (),
-        _ => panic!("Expected {} but it was missing", token)
+        Some(Lexeme::Keyword(_, it)) if *it == keyword => (),
+        _ => panic!("Expected {} but it was missing", keyword)
     };
 }
 
@@ -294,9 +300,16 @@ fn is_identifier(iter: &mut Peekable<Iter<Lexeme>>) -> bool {
     }
 }
 
-fn is_symbol(iter: &mut Peekable<Iter<Lexeme>>, token: &str) -> bool {
+fn is_symbol(iter: &mut Peekable<Iter<Lexeme>>, symbol: Symbol) -> bool {
     match iter.peek() {
-        Some(Lexeme::Symbol(_, it)) if it == token => true,
+        Some(Lexeme::Symbol(_, it)) if *it == symbol => true,
+        _ => false
+    }
+}
+
+fn is_keyword(iter: &mut Peekable<Iter<Lexeme>>, keyword: Keyword) -> bool {
+    match iter.peek() {
+        Some(Lexeme::Keyword(_, it)) if *it == keyword => true,
         _ => false
     }
 }
