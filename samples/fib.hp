@@ -1,4 +1,4 @@
-main :: {
+main :: => {
     print("Hello World")
     print(fib(6))
 }

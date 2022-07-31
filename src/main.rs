@@ -28,8 +28,8 @@ fn prep() -> Result<(), Box<dyn Error>> {
 
 fn main() -> Result<(), Box<dyn Error>> {
     prep()?;
-    // run_pipeline("./samples/fib.hp")?;
-    // run_pipeline("./samples/ooo.hp")?;
+    run_pipeline("./samples/fib.hp")?;
+    run_pipeline("./samples/ooo.hp")?;
     run_pipeline("./samples/test.hp")?;
     Ok(())
 }

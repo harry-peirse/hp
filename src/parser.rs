@@ -10,7 +10,7 @@ pub struct Function {
     pub name: String,
     pub args: Vec<Argument>,
     pub return_type_name: Option<String>,
-    pub block: Vec<Expression>,
+    pub block: Expression,
 }
 
 impl Display for Function {
@@ -31,11 +31,12 @@ pub enum Expression {
     Wrapped(Box<Expression>),
     LiteralString(String),
     LiteralNumber(String),
-    If(Box<Expression>, Box<Vec<Expression>>, Box<Vec<Expression>>),
+    If(Box<Expression>, Box<Expression>, Box<Expression>),
     Variable(String),
     Binary(Box<Expression>, BinaryOp, Box<Expression>),
     Unary(UnaryOp, Box<Expression>),
-    Declare(String, Box<Expression>)
+    Declare(String, Box<Expression>),
+    Block(Box<Vec<Expression>>),
 }
 
 #[derive(Debug, Clone)]
@@ -127,28 +128,9 @@ fn parse_function(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Function, Box<dyn
         expect_symbol(iter, Symbol::CloseBracket);
     }
 
-    let is_block = is_symbol(iter, Symbol::OpenBrace);
+    expect_symbol(iter, Symbol::EqualsRightArrow);
 
-    let mut block = vec!();
-    if is_block {
-        expect_symbol(iter, Symbol::OpenBrace);
-        skip_newline(iter);
-
-        while !is_symbol(iter, Symbol::CloseBrace) {
-            block.push(parse_expression(iter)?);
-            skip_newline(iter);
-        }
-        expect_symbol(iter, Symbol::CloseBrace);
-        skip_newline(iter);
-    } else {
-        expect_symbol(iter, Symbol::EqualsRightArrow);
-        skip_newline(iter);
-
-        block.push(parse_expression(iter)?);
-        skip_newline(iter);
-    }
-
-    Ok(Function { name, args, return_type_name: None, block })
+    Ok(Function { name, args, return_type_name: None, block: parse_expression(iter)? })
 }
 
 fn parse_argument(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Argument, Box<dyn Error>> {
@@ -242,7 +224,7 @@ fn parse_non_binary_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expr
                 let success_case = parse_expression(iter)?;
                 expect_keyword(iter, Keyword::Else);
                 let failure_case = parse_expression(iter)?;
-                Expression::If(Box::new(condition), Box::new(vec!(success_case)), Box::new(vec!(failure_case)))
+                Expression::If(Box::new(condition), Box::new(success_case), Box::new(failure_case))
             }
             Lexeme::Keyword(_, Keyword::Given) => {
                 let name = expect_identifier(iter)?;
@@ -256,6 +238,17 @@ fn parse_non_binary_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expr
                 let result = parse_expression(iter)?;
                 expect_symbol(iter, Symbol::CloseBracket);
                 Expression::Wrapped(Box::new(result))
+            }
+            Lexeme::Symbol(_, Symbol::OpenBrace) => {
+                let mut block = vec!();
+                skip_newline(iter);
+                while !is_symbol(iter, Symbol::CloseBrace) {
+                    block.push(parse_expression(iter)?);
+                    skip_newline(iter);
+                }
+                expect_symbol(iter, Symbol::CloseBrace);
+                skip_newline(iter);
+                Expression::Block(Box::new(block))
             }
             it => panic!("Unsupported Operation {}", it)
         })
