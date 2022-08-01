@@ -1,5 +1,6 @@
 use std::error::Error;
-use std::fs::{DirBuilder, DirEntry, File, ReadDir};
+use std::fs;
+use std::fs::{DirBuilder, File};
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Command;
@@ -15,22 +16,15 @@ mod parser;
 mod interpreter;
 mod node_generator;
 
-fn prep() -> Result<(), Box<dyn Error>> {
-    match File::open(Path::new("./samples/output")).ok() {
-        Some(_) => Ok(()),
-        None =>
-            match DirBuilder::new().create(Path::new("./samples/output")).ok() {
-                Some(_) => Ok(()),
-                None => panic!("Failed to created output folder")
-            }
-    }
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
-    prep()?;
+    fs::create_dir_all("./samples/output")
+        .expect("Could not create output directory for node");
+
     run_pipeline("./samples/fib.hp")?;
     run_pipeline("./samples/ooo.hp")?;
     run_pipeline("./samples/test.hp")?;
+
     Ok(())
 }
 

@@ -1,3 +1,9 @@
+person :: (
+    name: string
+    age: i64
+)
+
 main :: => {
-  print(given a = 1 + 2)
+  let harry = person(name: "Harry", age: 33)
+  print(harry)
 }

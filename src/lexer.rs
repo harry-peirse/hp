@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 #[derive(Clone)]
+#[derive(Debug)]
 pub struct Span {
     col: u64,
     row: u64,
@@ -14,6 +15,7 @@ impl Display for Span {
     }
 }
 
+#[derive(Debug)]
 pub enum Lexeme {
     Identifier(Span, String),
     Symbol(Span, Symbol),
@@ -29,7 +31,7 @@ pub enum Keyword {
     If,
     Then,
     Else,
-    Given,
+    Let,
     True,
     False,
 }
@@ -40,7 +42,7 @@ impl Display for Keyword {
             Keyword::If => "if",
             Keyword::Then => "then",
             Keyword::Else => "else",
-            Keyword::Given => "given",
+            Keyword::Let => "let",
             Keyword::True => "true",
             Keyword::False => "false"
         })
@@ -130,7 +132,7 @@ fn build_identifier(col: u64, row: u64, word: &String, is_number: bool, is_strin
             "if" => Lexeme::Keyword(pos, Keyword::If),
             "then" => Lexeme::Keyword(pos, Keyword::Then),
             "else" => Lexeme::Keyword(pos, Keyword::Else),
-            "given" => Lexeme::Keyword(pos, Keyword::Given),
+            "let" => Lexeme::Keyword(pos, Keyword::Let),
             "true" => Lexeme::Keyword(pos, Keyword::True),
             "false" => Lexeme::Keyword(pos, Keyword::False),
             _ => Lexeme::Identifier(pos, word.clone())
@@ -140,8 +142,8 @@ fn build_identifier(col: u64, row: u64, word: &String, is_number: bool, is_strin
 
 pub fn lex(code: String) -> Result<Vec<Lexeme>, Box<dyn Error>> {
     let mut vec = Vec::new();
-    let mut col: u64 = 0;
-    let mut row: u64 = 0;
+    let mut col: u64 = 1;
+    let mut row: u64 = 1;
     let mut word: String = "".to_string();
     let mut is_number = false;
     let mut is_decimal = false;
@@ -169,7 +171,7 @@ pub fn lex(code: String) -> Result<Vec<Lexeme>, Box<dyn Error>> {
                     is_number = false;
                     is_decimal = false;
                     word = "".to_string();
-                    col = 0;
+                    col = 1;
                     row += 1;
                 }
                 ' '  if !is_string => {

@@ -1,7 +1,10 @@
-use crate::parser::{BinaryOp, Expression, Function, UnaryOp};
+use crate::parser::{BinaryOp, Expression, Declaration, UnaryOp, Function, Struct};
 
-pub fn generate_node(ast: &Vec<Function>) -> String {
-    let functions = ast.iter().map(generate_function).collect::<Vec<String>>().join("\n\n");
+pub fn generate_node(ast: &Vec<Declaration>) -> String {
+    let functions = ast.iter().map(|it| match it {
+        Declaration::Function(fun) => generate_function(fun),
+        Declaration::Struct(str) => generate_struct(str)
+    }).collect::<Vec<String>>().join("\n\n");
     format!("{}\n\nmain();
 
 function print(arg) {{
@@ -14,7 +17,14 @@ fn generate_function(fun: &Function) -> String {
     let args = fun.args.iter().map(|it| it.name.clone()).collect::<Vec<String>>().join(", ");
     format!("function {}({}) {{
   return {};
-}}", fun.name, args, generate_expression(&fun.block, 1))
+}}", fun.name, args, generate_expression(&fun.body, 1))
+}
+
+fn generate_struct(str: &Struct) -> String {
+    let args = str.fields.iter().map(|it| it.name.clone()).collect::<Vec<String>>().join(", ");
+    format!("function {}({}) {{
+  return {{{}}};
+}}", str.name, args, args)
 }
 
 fn generate_expression(expr: &Expression, depth: usize) -> String {
@@ -36,7 +46,8 @@ fn generate_expression(expr: &Expression, depth: usize) -> String {
                             _ => generate_expression(it, depth + 1)
                         })
                         .map(|it| format!("{}", it))
-                        .collect::<String>(),
+                        .collect::<Vec<String>>()
+                        .join(", "),
                     "  ".repeat(depth)),
         Expression::Block(block) => {
             if block.len() == 1 {
@@ -47,7 +58,7 @@ fn generate_expression(expr: &Expression, depth: usize) -> String {
             } else {
                 let result = block.iter().enumerate()
                     .filter(|(i, _)| i.clone() < block.len() - 1)
-                    .map(|(i, f)| generate_expression(f, depth))
+                    .map(|(_, f)| generate_expression(f, depth))
                     .map(|s| format!("\n{}{};", "  ".repeat(depth + 1), s))
                     .collect::<String>();
 
@@ -68,6 +79,9 @@ fn generate_expression(expr: &Expression, depth: usize) -> String {
                     _ => format!(" ")
                 }
             }
+        }
+        Expression::Named(name, expr) => {
+            format!("{}", generate_expression(expr, depth))
         }
         Expression::Variable(name) => name.clone(),
         Expression::LiteralNumber(value) => value.clone(),
