@@ -231,10 +231,30 @@ fn parse_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box
     Ok(expression)
 }
 
+fn parse_string_template(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box<dyn Error>> {
+    let mut expr: Option<Expression> = None;
+    while let Some(_) = iter.peek() {
+        expr = Some(match expr {
+            None => Expression::Wrapped(Box::new(parse_expression(iter)?)),
+            Some(previous_expr) =>
+                Expression::Wrapped(Box::new(Expression::Binary(
+                    Box::new(previous_expr),
+                    BinaryOp::Plus,
+                    Box::new(Expression::Wrapped(Box::new(parse_expression(iter)?))))))
+        })
+    }
+    if let Some(expr) = expr {
+        Ok(expr)
+    } else {
+        panic!("Empty String Template")
+    }
+}
+
 fn parse_non_binary_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box<dyn Error>> {
     if let Some(lexeme) = iter.next() {
         Ok(match lexeme {
             Lexeme::String(_, value) => Expression::LiteralString(value.clone()),
+            Lexeme::StringTemplate(_, tokens) => parse_string_template(&mut tokens.iter().peekable())?,
             Lexeme::Number(_, value) => Expression::LiteralNumber(value.clone()),
             Lexeme::Identifier(_, identifier) => {
                 match iter.peek() {
@@ -320,7 +340,7 @@ fn expect_identifier(iter: &mut Peekable<Iter<Lexeme>>) -> Result<String, Box<dy
 fn expect_symbol(iter: &mut Peekable<Iter<Lexeme>>, sym: Symbol) {
     match iter.next() {
         Some(Lexeme::Symbol(_, it)) if sym == *it => (),
-        it  => panic!("Expected {} but it was {:?}", sym, it)
+        it => panic!("Expected {} but it was {:?}", sym, it)
     };
 }
 

@@ -7,23 +7,21 @@ use std::process::Command;
 use std::str::from_utf8;
 
 use lexer::lex;
-use parser::parse;
-use interpreter::interpret;
 use node_generator::generate_node;
+use parser::parse;
 
 mod lexer;
 mod parser;
-mod interpreter;
 mod node_generator;
 
+#[feature(exclusive_range_pattern)]
 
 fn main() -> Result<(), Box<dyn Error>> {
     fs::create_dir_all("./samples/output")
         .expect("Could not create output directory for node");
 
-    run_pipeline("./samples/fib.hp")?;
-    run_pipeline("./samples/ooo.hp")?;
-    run_pipeline("./samples/test.hp")?;
+    // run_pipeline("./samples/hello_world.hp")?;
+    run_pipeline("./samples/greeter.hp")?;
 
     Ok(())
 }
@@ -44,9 +42,6 @@ fn run_pipeline(filename: &str) -> Result<(), Box<dyn Error>> {
 
     println!("\nAST");
     println!("{}", ast.iter().map(|it| it.to_string()).collect::<Vec<String>>().join("\n"));
-
-    println!("\nInterpreting...\n");
-    interpret(&ast)?;
 
     println!("\nNode Target");
     let node_output = generate_node(&ast);

@@ -22,6 +22,7 @@ pub enum Lexeme {
     Keyword(Span, Keyword),
     Number(Span, String),
     String(Span, String),
+    StringTemplate(Span, Box<Vec<Lexeme>>),
     Newline(Span),
     Eof(Span),
 }
@@ -73,7 +74,7 @@ pub enum Symbol {
     Equals,
     Dot,
     Colon,
-    DoubleColon
+    DoubleColon,
 }
 
 impl Display for Symbol {
@@ -115,18 +116,19 @@ impl Display for Lexeme {
             Lexeme::Symbol(pos, sym) => write!(f, "{} SYM  {}", pos, sym),
             Lexeme::Number(pos, id) => write!(f, "{} NUM  {}", pos, id),
             Lexeme::String(pos, id) => write!(f, "{} STR  {}", pos, id),
+            Lexeme::StringTemplate(pos, parts) => write!(f, "{} TEMPLATE {}", pos, parts.iter().map(|it| format!("\n               {}", it)).collect::<String>()),
             Lexeme::Keyword(pos, keyword) => write!(f, "{} KEY  {}", pos, keyword)
         }
     }
 }
 
-fn build_identifier(col: u64, row: u64, word: &String, is_number: bool, is_string: bool) -> Lexeme {
+fn build_identifier(col: u64, row: u64, word: &String, is_number: bool, is_string: bool) -> Result<Lexeme, Box<dyn Error>> {
     let word_length = word.len() as u64;
     let pos = Span { col: col - word_length as u64, row, length: word_length };
-    if is_number {
+    Ok(if is_number {
         Lexeme::Number(pos, word.clone())
     } else if is_string {
-        Lexeme::String(pos, word.clone())
+        Lexeme::StringTemplate(pos.clone(), Box::new(lex_string_template(pos, word.clone())?))
     } else {
         match word.as_str() {
             "if" => Lexeme::Keyword(pos, Keyword::If),
@@ -137,11 +139,59 @@ fn build_identifier(col: u64, row: u64, word: &String, is_number: bool, is_strin
             "false" => Lexeme::Keyword(pos, Keyword::False),
             _ => Lexeme::Identifier(pos, word.clone())
         }
+    })
+}
+
+fn lex_string_template(span: Span, string: String) -> Result<Vec<Lexeme>, Box<dyn Error>> {
+    let mut vec = vec!();
+    let mut word: String = "".to_string();
+    let mut is_var = false;
+    let mut skip = false;
+    for (i, c) in string.chars().enumerate() {
+        if skip {
+            skip = false;
+        } else {
+            match c {
+                '\r' => (),
+                '$' if !is_var => {
+                    match string.chars().nth(i + 1) {
+                        Some(c) if c == '$' => {
+                            word.push('$');
+                            skip = true;
+                        }
+                        _ => {
+                            is_var = true;
+                            vec.push(Lexeme::String(span.clone(), word.clone()));
+                            word = "".to_string();
+                        }
+                    }
+                }
+                'a'..='z' | 'A'..='Z' | '0'..='9' | '_' if is_var => {
+                    word.push(c)
+                }
+                _ if is_var => {
+                    vec.push(Lexeme::Identifier(span.clone(), word.clone()));
+                    word = "".to_string();
+                    is_var = false;
+                }
+                _ => {
+                    word.push(c)
+                }
+            }
+        }
     }
+    if !word.is_empty() {
+        if is_var {
+            vec.push(Lexeme::Identifier(span.clone(), word.clone()));
+        } else {
+            vec.push(Lexeme::String(span.clone(), word.clone()));
+        }
+    }
+    Ok(vec)
 }
 
 pub fn lex(code: String) -> Result<Vec<Lexeme>, Box<dyn Error>> {
-    let mut vec = Vec::new();
+    let mut vec = vec!();
     let mut col: u64 = 1;
     let mut row: u64 = 1;
     let mut word: String = "".to_string();
@@ -158,7 +208,7 @@ pub fn lex(code: String) -> Result<Vec<Lexeme>, Box<dyn Error>> {
                 '\r' => (),
                 '\n' if !is_string => {
                     if !word.is_empty() {
-                        vec.push(build_identifier(col, row, &word, is_number, is_string));
+                        vec.push(build_identifier(col, row, &word, is_number, is_string)?);
                     }
                     match vec.last() {
                         None => (),
@@ -176,7 +226,7 @@ pub fn lex(code: String) -> Result<Vec<Lexeme>, Box<dyn Error>> {
                 }
                 ' '  if !is_string => {
                     if !word.is_empty() {
-                        vec.push(build_identifier(col, row, &word, is_number, is_string));
+                        vec.push(build_identifier(col, row, &word, is_number, is_string)?);
                         word = "".to_string();
                     }
                     is_number = false;
@@ -191,21 +241,21 @@ pub fn lex(code: String) -> Result<Vec<Lexeme>, Box<dyn Error>> {
                 '"' => {
                     if !is_string {
                         if !word.is_empty() {
-                            vec.push(build_identifier(col, row, &word, is_number, is_string));
+                            vec.push(build_identifier(col, row, &word, is_number, is_string)?);
                             word = "".to_string();
                         }
                         is_number = false;
                         is_decimal = false;
                         is_string = true;
                     } else {
-                        vec.push(build_identifier(col, row, &word, is_number, is_string));
+                        vec.push(build_identifier(col, row, &word, is_number, is_string)?);
                         word = "".to_string();
                         is_string = false;
                     }
                 }
                 '{' | '}' | '(' | ')' | '[' | ']' | '+' | '-' | '*' | '/' | '=' | '<' | '>' | '!' | ':' | '|' | '&' | ',' | '.' | ';' if !is_string => {
                     if !word.is_empty() {
-                        vec.push(build_identifier(col, row, &word, is_number, is_string));
+                        vec.push(build_identifier(col, row, &word, is_number, is_string)?);
                         word = "".to_string();
                     }
                     is_number = false;
@@ -257,7 +307,7 @@ pub fn lex(code: String) -> Result<Vec<Lexeme>, Box<dyn Error>> {
                     col += 1;
                 }
                 _ if is_number && !is_string => {
-                    vec.push(build_identifier(col, row, &word, is_number, is_string));
+                    vec.push(build_identifier(col, row, &word, is_number, is_string)?);
                     word = "".to_string();
                     is_number = false;
                     is_decimal = false;

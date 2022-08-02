@@ -5,24 +5,36 @@ pub fn generate_node(ast: &Vec<Declaration>) -> String {
         Declaration::Function(fun) => generate_function(fun),
         Declaration::Struct(str) => generate_struct(str)
     }).collect::<Vec<String>>().join("\n\n");
-    format!("{}\n\nmain();
+    format!("$readline = require('readline');
 
-function print(arg) {{
+{}
+
+main();
+
+async function write(arg) {{
   console.log(arg);
   return arg;
-}}", functions)
+}}
+
+async function read() {{
+    const rl = $readline.createInterface(process.stdin);
+    const result = await new Promise((res) => rl.question('', res));
+    rl.close();
+    return result;
+}}
+", functions)
 }
 
 fn generate_function(fun: &Function) -> String {
     let args = fun.args.iter().map(|it| it.name.clone()).collect::<Vec<String>>().join(", ");
-    format!("function {}({}) {{
+    format!("async function {}({}) {{
   return {};
 }}", fun.name, args, generate_expression(&fun.body, 1))
 }
 
 fn generate_struct(str: &Struct) -> String {
     let args = str.fields.iter().map(|it| it.name.clone()).collect::<Vec<String>>().join(", ");
-    format!("function {}({}) {{
+    format!("async function {}({}) {{
   return {{{}}};
 }}", str.name, args, args)
 }
@@ -30,7 +42,7 @@ fn generate_struct(str: &Struct) -> String {
 fn generate_expression(expr: &Expression, depth: usize) -> String {
     match expr {
         Expression::Call(name, args) =>
-            format!("(() => {{{}\n{}return {}({})\n{}}})()",
+            format!("(await (async () => {{{}\n{}return await {}({})\n{}}})())",
                     args.iter()
                         .filter(|it| matches!(it, Expression::Declare(_,_)))
                         .map(|it| match it {
@@ -64,14 +76,14 @@ fn generate_expression(expr: &Expression, depth: usize) -> String {
 
                 match block.last() {
                     Some(Expression::Declare(name, expr)) =>
-                        format!("(() => {{{}\n{depth}{}\n{depth}return {};\n{}}})()",
+                        format!("(await (async () => {{{}\n{depth}{}\n{depth}return {};\n{}}})())",
                                 result,
                                 generate_expression(&Expression::Declare(name.clone(), Box::new(*expr.clone())), depth + 1),
                                 name,
                                 "  ".repeat(depth),
                                 depth = "  ".repeat(depth + 1)),
                     Some(expr) =>
-                        format!("(() => {{{}\n{depth}return {};\n{}}})()",
+                        format!("(await (async () => {{{}\n{depth}return {};\n{}}})())",
                                 result,
                                 generate_expression(expr, depth + 1),
                                 "  ".repeat(depth),

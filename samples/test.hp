@@ -1,9 +1,0 @@
-person :: (
-    name: string
-    age: i64
-)
-
-main :: => {
-  let harry = person(name: "Harry", age: 33)
-  print(harry)
-}
