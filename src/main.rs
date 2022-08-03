@@ -15,7 +15,6 @@ mod parser;
 mod node_generator;
 
 #[feature(exclusive_range_pattern)]
-
 fn main() -> Result<(), Box<dyn Error>> {
     fs::create_dir_all("./samples/output")
         .expect("Could not create output directory for node");

@@ -1,5 +1,7 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::iter::Peekable;
+use std::str::Chars;
 
 #[derive(Clone)]
 #[derive(Debug)]
@@ -122,13 +124,11 @@ impl Display for Lexeme {
     }
 }
 
-fn build_identifier(col: u64, row: u64, word: &String, is_number: bool, is_string: bool) -> Result<Lexeme, Box<dyn Error>> {
+fn build_identifier(col: u64, row: u64, word: &String, is_number: bool) -> Result<Lexeme, Box<dyn Error>> {
     let word_length = word.len() as u64;
-    let pos = Span { col: col - word_length as u64, row, length: word_length };
+    let pos = Span { col: col - word_length as u64, row: row.clone(), length: word_length };
     Ok(if is_number {
         Lexeme::Number(pos, word.clone())
-    } else if is_string {
-        Lexeme::StringTemplate(pos.clone(), Box::new(lex_string_template(pos, word.clone())?))
     } else {
         match word.as_str() {
             "if" => Lexeme::Keyword(pos, Keyword::If),
@@ -142,186 +142,183 @@ fn build_identifier(col: u64, row: u64, word: &String, is_number: bool, is_strin
     })
 }
 
-fn lex_string_template(span: Span, string: String) -> Result<Vec<Lexeme>, Box<dyn Error>> {
-    let mut vec = vec!();
-    let mut word: String = "".to_string();
-    let mut is_var = false;
-    let mut skip = false;
-    for (i, c) in string.chars().enumerate() {
-        if skip {
-            skip = false;
-        } else {
-            match c {
-                '\r' => (),
-                '$' if !is_var => {
-                    match string.chars().nth(i + 1) {
-                        Some(c) if c == '$' => {
-                            word.push('$');
-                            skip = true;
-                        }
-                        _ => {
-                            is_var = true;
-                            vec.push(Lexeme::String(span.clone(), word.clone()));
-                            word = "".to_string();
-                        }
-                    }
-                }
-                'a'..='z' | 'A'..='Z' | '0'..='9' | '_' if is_var => {
-                    word.push(c)
-                }
-                _ if is_var => {
-                    vec.push(Lexeme::Identifier(span.clone(), word.clone()));
-                    word = "".to_string();
-                    is_var = false;
-                }
-                _ => {
-                    word.push(c)
-                }
-            }
-        }
-    }
-    if !word.is_empty() {
-        if is_var {
-            vec.push(Lexeme::Identifier(span.clone(), word.clone()));
-        } else {
-            vec.push(Lexeme::String(span.clone(), word.clone()));
-        }
-    }
-    Ok(vec)
-}
 
 pub fn lex(code: String) -> Result<Vec<Lexeme>, Box<dyn Error>> {
+    lex_module(1, 1, &mut code.chars().peekable())
+}
+
+fn lex_module(mut col: u64, mut row: u64, iter: &mut Peekable<Chars>) -> Result<Vec<Lexeme>, Box<dyn Error>> {
     let mut vec = vec!();
-    let mut col: u64 = 1;
-    let mut row: u64 = 1;
     let mut word: String = "".to_string();
     let mut is_number = false;
     let mut is_decimal = false;
-    let mut skip = false;
-    let mut is_string = false;
 
-    for (i, c) in code.chars().enumerate() {
-        if skip {
-            skip = false;
-        } else {
-            match c {
-                '\r' => (),
-                '\n' if !is_string => {
-                    if !word.is_empty() {
-                        vec.push(build_identifier(col, row, &word, is_number, is_string)?);
+    while let Some(c) = iter.next() {
+        match c {
+            '\r' => (),
+            '\n' => {
+                if !word.is_empty() {
+                    vec.push(build_identifier(col, row, &word, is_number)?);
+                }
+                match vec.last() {
+                    None => (),
+                    Some(last) => {
+                        if !matches!(last, Lexeme::Newline(_)) {
+                            vec.push(Lexeme::Newline(Span { col, row, length: 1 }));
+                        }
                     }
-                    match vec.last() {
-                        None => (),
-                        Some(last) => {
-                            if !matches!(last, Lexeme::Newline(_)) {
-                                vec.push(Lexeme::Newline(Span { col, row, length: 1 }));
+                }
+                is_number = false;
+                is_decimal = false;
+                word = "".to_string();
+                col = 1;
+                row += 1;
+            }
+            ' ' => {
+                if !word.is_empty() {
+                    vec.push(build_identifier(col, row, &word, is_number)?);
+                    word = "".to_string();
+                }
+                is_number = false;
+                is_decimal = false;
+                col += 1;
+            }
+            '.' if is_number && !is_decimal => {
+                word.push(c);
+                is_decimal = true;
+                col += 1;
+            }
+            '"' => {
+                if !word.is_empty() {
+                    vec.push(build_identifier(col, row, &word, is_number)?);
+                    word = "".to_string();
+                }
+                vec.push(Lexeme::StringTemplate(Span { col, row, length: word.len() as u64 }, Box::new(lex_string_template(col, row, iter)?)));
+                is_number = false;
+                is_decimal = false;
+            }
+            '{' | '}' | '(' | ')' | '[' | ']' | '+' | '-' | '*' | '/' | '=' | '<' | '>' | '!' | ':' | '|' | '&' | ',' | '.' | ';' => {
+                if !word.is_empty() {
+                    vec.push(build_identifier(col, row, &word, is_number)?);
+                    word = "".to_string();
+                }
+                is_number = false;
+                is_decimal = false;
+
+                println!("{}, {:?} {}", c, iter, word);
+
+                let mut symbol = c.to_string();
+                if ['+', '-', '*', '/', '=', '<', '>', '!', ':', '|', '&'].contains(&c) {
+                    match iter.peek() {
+                        Some(next_c) => {
+                            if let '+' | '-' | '*' | '/' | '=' | '<' | '>' | '!' | ':' | '|' | '&' = next_c {
+                                symbol.push(next_c.clone());
+                                iter.next();
+                                col += 1;
                             }
                         }
-                    }
-                    is_number = false;
-                    is_decimal = false;
-                    word = "".to_string();
-                    col = 1;
-                    row += 1;
-                }
-                ' '  if !is_string => {
-                    if !word.is_empty() {
-                        vec.push(build_identifier(col, row, &word, is_number, is_string)?);
-                        word = "".to_string();
-                    }
-                    is_number = false;
-                    is_decimal = false;
-                    col += 1;
-                }
-                '.' if !is_string && is_number && !is_decimal => {
-                    word.push(c);
-                    is_decimal = true;
-                    col += 1;
-                }
-                '"' => {
-                    if !is_string {
-                        if !word.is_empty() {
-                            vec.push(build_identifier(col, row, &word, is_number, is_string)?);
-                            word = "".to_string();
-                        }
-                        is_number = false;
-                        is_decimal = false;
-                        is_string = true;
-                    } else {
-                        vec.push(build_identifier(col, row, &word, is_number, is_string)?);
-                        word = "".to_string();
-                        is_string = false;
+                        None => ()
                     }
                 }
-                '{' | '}' | '(' | ')' | '[' | ']' | '+' | '-' | '*' | '/' | '=' | '<' | '>' | '!' | ':' | '|' | '&' | ',' | '.' | ';' if !is_string => {
-                    if !word.is_empty() {
-                        vec.push(build_identifier(col, row, &word, is_number, is_string)?);
-                        word = "".to_string();
-                    }
-                    is_number = false;
-                    is_decimal = false;
 
-                    let mut symbol = c.to_string();
-                    if ['+', '-', '*', '/', '=', '<', '>', '!', ':', '|', '&'].contains(&c) {
-                        match code.chars().nth(i + 1) {
-                            Some(char) => if ['+', '-', '*', '/', '=', '<', '>', '!', ':', '|', '&'].contains(&char) {
-                                symbol.push(char);
-                                skip = true;
-                            }
-                            None => ()
-                        }
-                    }
-
-                    vec.push(Lexeme::Symbol(Span { col, row, length: symbol.len() as u64 }, match symbol.as_str() {
-                        "{" => Symbol::OpenBrace,
-                        "}" => Symbol::CloseBrace,
-                        "(" => Symbol::OpenBracket,
-                        ")" => Symbol::CloseBracket,
-                        "+" => Symbol::Plus,
-                        "-" => Symbol::Dash,
-                        "*" => Symbol::Asterisk,
-                        "/" => Symbol::ForwardSlash,
-                        "," => Symbol::Comma,
-                        "!" => Symbol::Bang,
-                        "&&" => Symbol::DoubleAmpersand,
-                        "||" => Symbol::DoubleBar,
-                        "<" => Symbol::LeftArrow,
-                        ">" => Symbol::RightArrow,
-                        "<=" => Symbol::LeftArrowEquals,
-                        ">=" => Symbol::RightArrowEquals,
-                        "=>" => Symbol::EqualsRightArrow,
-                        "==" => Symbol::DoubleEquals,
-                        "!=" => Symbol::BangEquals,
-                        "=" => Symbol::Equals,
-                        "." => Symbol::Dot,
-                        "::" => Symbol::DoubleColon,
-                        ":" => Symbol::Colon,
-                        _ => panic!("Unrecognised symbol {}", symbol)
-                    }));
+                vec.push(Lexeme::Symbol(Span { col, row, length: symbol.len() as u64 }, match symbol.as_str() {
+                    "{" => Symbol::OpenBrace,
+                    "}" => Symbol::CloseBrace,
+                    "(" => Symbol::OpenBracket,
+                    ")" => Symbol::CloseBracket,
+                    "+" => Symbol::Plus,
+                    "-" => Symbol::Dash,
+                    "*" => Symbol::Asterisk,
+                    "/" => Symbol::ForwardSlash,
+                    "," => Symbol::Comma,
+                    "!" => Symbol::Bang,
+                    "&&" => Symbol::DoubleAmpersand,
+                    "||" => Symbol::DoubleBar,
+                    "<" => Symbol::LeftArrow,
+                    ">" => Symbol::RightArrow,
+                    "<=" => Symbol::LeftArrowEquals,
+                    ">=" => Symbol::RightArrowEquals,
+                    "=>" => Symbol::EqualsRightArrow,
+                    "==" => Symbol::DoubleEquals,
+                    "!=" => Symbol::BangEquals,
+                    "=" => Symbol::Equals,
+                    "." => Symbol::Dot,
+                    "::" => Symbol::DoubleColon,
+                    ":" => Symbol::Colon,
+                    _ => panic!("Unrecognised symbol {}", symbol)
+                }));
+            }
+            '0'..='9' => {
+                if word.is_empty() {
+                    is_number = true;
                 }
-                '0'..='9'  if !is_string => {
-                    if word.is_empty() {
-                        is_number = true;
-                    }
-                    word.push(c);
-                    col += 1;
-                }
-                _ if is_number && !is_string => {
-                    vec.push(build_identifier(col, row, &word, is_number, is_string)?);
-                    word = "".to_string();
-                    is_number = false;
-                    is_decimal = false;
-                    word.push(c);
-                    col += 1;
-                }
-                _ => {
-                    word.push(c);
-                    col += 1;
-                }
+                word.push(c);
+                col += 1;
+            }
+            _ if is_number => {
+                vec.push(build_identifier(col, row, &word, is_number)?);
+                word = "".to_string();
+                is_number = false;
+                is_decimal = false;
+                word.push(c);
+                col += 1;
+            }
+            _ => {
+                word.push(c);
+                col += 1;
             }
         }
     }
 
+    println!("{:?} {:?}", iter, word);
+
     vec.push(Lexeme::Eof(Span { col, row, length: 0 }));
+    Ok(vec)
+}
+
+fn lex_string_template(mut col: u64, mut row: u64, iter: &mut Peekable<Chars>) -> Result<Vec<Lexeme>, Box<dyn Error>> {
+    let mut vec = vec!();
+    let mut word = String::new();
+    let mut is_var = false;
+    while let Some(c) = iter.next() {
+        col += 1;
+        match c {
+            '\r' => (),
+            '"' => {
+                if is_var {
+                    vec.push(Lexeme::Identifier(Span { col, row, length: word.len() as u64 }, word.clone()));
+                    word = String::new();
+                } else {
+                    vec.push(Lexeme::String(Span { col, row, length: word.len() as u64 }, word.clone()));
+                    word = String::new();
+                }
+                break;
+            }
+            '$' if !is_var => {
+                match iter.peek() {
+                    Some('$') => {
+                        word.push('$');
+                        iter.next();
+                    }
+                    _ => {
+                        is_var = true;
+                        vec.push(Lexeme::String(Span { col, row, length: word.len() as u64 }, word.clone()));
+                        word = "".to_string();
+                    }
+                }
+            }
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '_' if is_var => {
+                word.push(c)
+            }
+            _ if is_var => {
+                vec.push(Lexeme::Identifier(Span { col, row, length: word.len() as u64 }, word.clone()));
+                word = String::new();
+                is_var = false;
+            }
+            _ => {
+                word.push(c)
+            }
+        }
+    }
     Ok(vec)
 }
