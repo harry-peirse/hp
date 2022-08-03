@@ -62,6 +62,7 @@ pub enum Expression {
     LiteralNumber(String),
     Named(String, Box<Expression>),
     If(Box<Expression>, Box<Expression>, Box<Expression>),
+    Loop(Box<Expression>, Box<Expression>),
     Variable(String),
     Binary(Box<Expression>, BinaryOp, Box<Expression>),
     Unary(UnaryOp, Box<Expression>),
@@ -91,6 +92,10 @@ pub enum BinaryOp {
     Equals,
     NotEquals,
     Assign,
+    PlusAssign,
+    MinusAssign,
+    MultiplyAssign,
+    DivideAssign,
     Dot,
 }
 
@@ -98,6 +103,10 @@ pub enum BinaryOp {
 fn binary_op_precedence(op: &BinaryOp) -> u32 {
     match op {
         BinaryOp::Assign => 10,
+        BinaryOp::PlusAssign => 10,
+        BinaryOp::MinusAssign => 10,
+        BinaryOp::MultiplyAssign => 10,
+        BinaryOp::DivideAssign => 10,
         BinaryOp::Or => 20,
         BinaryOp::And => 30,
         BinaryOp::Equals => 40,
@@ -198,6 +207,10 @@ fn parse_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box
                 Symbol::DoubleEquals => Some(BinaryOp::Equals),
                 Symbol::BangEquals => Some(BinaryOp::NotEquals),
                 Symbol::Equals => Some(BinaryOp::Assign),
+                Symbol::PlusEquals => Some(BinaryOp::PlusAssign),
+                Symbol::DashEquals => Some(BinaryOp::MinusAssign),
+                Symbol::AsteriskEquals => Some(BinaryOp::MultiplyAssign),
+                Symbol::ForwardSlashEquals => Some(BinaryOp::DivideAssign),
                 Symbol::DoubleAmpersand => Some(BinaryOp::And),
                 Symbol::DoubleBar => Some(BinaryOp::Or),
                 Symbol::Dot => Some(BinaryOp::Dot),
@@ -286,7 +299,6 @@ fn parse_non_binary_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expr
             }
             Lexeme::Keyword(_, Keyword::If) => {
                 let condition = parse_expression(iter)?;
-                expect_keyword(iter, Keyword::Then);
                 let success_case = parse_expression(iter)?;
                 expect_keyword(iter, Keyword::Else);
                 let failure_case = parse_expression(iter)?;
@@ -296,6 +308,11 @@ fn parse_non_binary_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expr
                 let name = expect_identifier(iter)?;
                 expect_symbol(iter, Symbol::Equals);
                 Expression::Declare(name, Box::new(parse_expression(iter)?))
+            }
+            Lexeme::Keyword(_, Keyword::Loop) => {
+                let count = parse_expression(iter)?;
+                let body = parse_expression(iter)?;
+                Expression::Loop(Box::new(count), Box::new(body))
             }
             Lexeme::Symbol(_, Symbol::Plus) => Expression::Unary(UnaryOp::Plus, Box::new(parse_non_binary_expression(iter)?)),
             Lexeme::Symbol(_, Symbol::Dash) => Expression::Unary(UnaryOp::Minus, Box::new(parse_non_binary_expression(iter)?)),

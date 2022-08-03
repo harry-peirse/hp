@@ -1,5 +1,9 @@
 main :: => {
     write("What's your name?")
     let name = read()
-    write("Hello, $name")
+    if name is "Alice" or name is "Bob" {
+        write("Hello, $name")
+    } else {
+        write("Oh, I don't know you.")
+    }
 }

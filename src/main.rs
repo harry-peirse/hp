@@ -20,7 +20,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("Could not create output directory for node");
 
     // run_pipeline("./samples/hello_world.hp")?;
-    run_pipeline("./samples/greeter.hp")?;
+    // run_pipeline("./samples/greeter.hp")?;
+    run_pipeline("./samples/counter.hp")?;
 
     Ok(())
 }
