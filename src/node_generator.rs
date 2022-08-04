@@ -1,4 +1,4 @@
-use crate::parser::{BinaryOp, Expression, Declaration, UnaryOp, Function, Struct};
+use crate::parser::{BinaryOp, Declaration, Expression, Function, Struct, UnaryOp};
 
 pub fn generate_node(ast: &Vec<Declaration>) -> String {
     let functions = ast.iter().map(|it| match it {
@@ -41,27 +41,14 @@ fn generate_struct(str: &Struct) -> String {
 
 fn generate_expression(expr: &Expression, depth: usize) -> String {
     match expr {
-        Expression::Call(name, args) =>
-            format!("(await (async () => {{{}\n{}return await {}({})\n{}}})())",
-                    args.iter()
-                        .filter(|it| matches!(it, Expression::Declare(_,_)))
-                        .map(|it| match it {
-                            Expression::Declare(_, _) => format!("\n{}{};", "  ".repeat(depth + 1), generate_expression(it, depth + 1)),
-                            _ => "NOT POSSIBLE?".to_string()
-                        })
-                        .collect::<String>(),
-                    "  ".repeat(depth + 1),
+        Expression::Call(_, name, args) =>
+            format!("(await {}({}))",
                     name,
                     args.iter()
-                        .map(|it| match it {
-                            Expression::Declare(name, _) => generate_expression(&Expression::Variable(name.clone()), depth + 1),
-                            _ => generate_expression(it, depth + 1)
-                        })
-                        .map(|it| format!("{}", it))
+                        .map(|it| generate_expression(it, depth + 1))
                         .collect::<Vec<String>>()
-                        .join(", "),
-                    "  ".repeat(depth)),
-        Expression::Block(block) => {
+                        .join(", ")),
+        Expression::Block(_, block) => {
             if block.len() == 1 {
                 match block.first() {
                     Some(expr) => format!("{}", generate_expression(expr, depth)),
@@ -75,13 +62,6 @@ fn generate_expression(expr: &Expression, depth: usize) -> String {
                     .collect::<String>();
 
                 match block.last() {
-                    Some(Expression::Declare(name, expr)) =>
-                        format!("(await (async () => {{{}\n{depth}{}\n{depth}return {};\n{}}})())",
-                                result,
-                                generate_expression(&Expression::Declare(name.clone(), Box::new(*expr.clone())), depth + 1),
-                                name,
-                                "  ".repeat(depth),
-                                depth = "  ".repeat(depth + 1)),
                     Some(expr) =>
                         format!("(await (async () => {{{}\n{depth}return {};\n{}}})())",
                                 result,
@@ -92,23 +72,20 @@ fn generate_expression(expr: &Expression, depth: usize) -> String {
                 }
             }
         }
-        Expression::Named(name, expr) => {
-            format!("{}", generate_expression(expr, depth))
-        }
-        Expression::Variable(name) => name.clone(),
+        Expression::Variable(_, name) => name.clone(),
         Expression::LiteralNumber(value) => value.clone(),
         Expression::LiteralString(value) => format!("\"{}\"", value.clone()),
-        Expression::Wrapped(expr) => format!("({})", generate_expression(expr, depth)),
-        Expression::Unary(op, expr) =>
+        Expression::Wrapped(_, expr) => format!("({})", generate_expression(expr, depth)),
+        Expression::Unary(_, op, expr) =>
             format!("{}{}",
                     get_unary_op(op),
                     generate_expression(expr, depth)),
-        Expression::Binary(lhs, op, rhs) =>
+        Expression::Binary(_, lhs, op, rhs) =>
             format!("({} {} {})",
                     generate_expression(lhs, depth),
                     get_binary_op(op),
                     generate_expression(rhs, depth)),
-        Expression::If(condition, success, failure) =>
+        Expression::If(_, condition, success, failure) =>
             format!("({} ? {} : {})",
                     generate_expression(condition, depth),
                     generate_expression(success, depth + 1),

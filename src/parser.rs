@@ -10,6 +10,7 @@ pub struct Function {
     pub name: String,
     pub args: Box<Vec<Argument>>,
     pub body: Expression,
+    pub return_type: Option<String>
 }
 
 impl Display for Function {
@@ -56,17 +57,16 @@ impl Display for Declaration {
 
 #[derive(Debug, Clone)]
 pub enum Expression {
-    Call(String, Box<Vec<Expression>>),
-    Wrapped(Box<Expression>),
+    Call(Option<String>, String, Box<Vec<Expression>>),
+    Wrapped(Option<String>, Box<Expression>),
     LiteralString(String),
     LiteralNumber(String),
-    Named(String, Box<Expression>),
-    If(Box<Expression>, Box<Expression>, Box<Expression>),
-    Variable(String),
-    Binary(Box<Expression>, BinaryOp, Box<Expression>),
-    Unary(UnaryOp, Box<Expression>),
+    If(Option<String>, Box<Expression>, Box<Expression>, Box<Expression>),
+    Variable(Option<String>, String),
+    Binary(Option<String>, Box<Expression>, BinaryOp, Box<Expression>),
+    Unary(Option<String>, UnaryOp, Box<Expression>),
     Declare(String, Box<Expression>),
-    Block(Box<Vec<Expression>>),
+    Block(Option<String>, Box<Vec<Expression>>),
 }
 
 #[derive(Debug, Clone)]
@@ -150,7 +150,7 @@ fn parse_declaration(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Declaration, B
     skip_newline(iter);
     if let Some(Lexeme::Symbol(_, Symbol::EqualsRightArrow)) = iter.peek() {
         expect_symbol(iter, Symbol::EqualsRightArrow);
-        Ok(Declaration::Function(Function { name, args: Box::new(args), body: parse_expression(iter)? }))
+        Ok(Declaration::Function(Function { name, args: Box::new(args), body: parse_expression(iter)? , return_type: None}))
     } else {
         Ok(Declaration::Struct(Struct { name, fields: Box::new(args) }))
     }
@@ -210,17 +210,17 @@ fn parse_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression, Box
             let next = parse_non_binary_expression(iter)?;
             let mut previous = &mut expression;
             loop {
-                if let Expression::Binary(ref mut lhs, ref mut previous_op, ref mut rhs) = previous {
+                if let Expression::Binary(None, ref mut lhs, ref mut previous_op, ref mut rhs) = previous {
                     if binary_op_precedence(&next_op) > binary_op_precedence(&previous_op) {
                         previous = rhs;
                     } else {
-                        *lhs = Box::new(Expression::Binary(Box::new(*lhs.clone()), previous_op.clone(), Box::new(*rhs.clone())));
+                        *lhs = Box::new(Expression::Binary(None, Box::new(*lhs.clone()), previous_op.clone(), Box::new(*rhs.clone())));
                         *previous_op = next_op.clone();
                         *rhs = Box::new(next);
                         break;
                     }
                 } else {
-                    *previous = Expression::Binary(Box::new(previous.clone()), next_op, Box::new(next));
+                    *previous = Expression::Binary(None, Box::new(previous.clone()), next_op, Box::new(next));
                     break;
                 }
             }
@@ -235,12 +235,12 @@ fn parse_string_template(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expression
     let mut expr: Option<Expression> = None;
     while let Some(_) = iter.peek() {
         expr = Some(match expr {
-            None => Expression::Wrapped(Box::new(parse_expression(iter)?)),
+            None => Expression::Wrapped(None, Box::new(parse_expression(iter)?)),
             Some(previous_expr) =>
-                Expression::Wrapped(Box::new(Expression::Binary(
-                    Box::new(previous_expr),
+                Expression::Wrapped(None, Box::new(Expression::Binary(None,
+                                                                      Box::new(previous_expr),
                     BinaryOp::Plus,
-                    Box::new(Expression::Wrapped(Box::new(parse_expression(iter)?))))))
+                    Box::new(Expression::Wrapped(None, Box::new(parse_expression(iter)?))))))
         })
     }
     if let Some(expr) = expr {
@@ -271,17 +271,12 @@ fn parse_non_binary_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expr
                                     }
                                 }
                                 expect_symbol(iter, Symbol::CloseBracket);
-                                Expression::Call(identifier.clone(), Box::new(args))
+                                Expression::Call(None, identifier.clone(), Box::new(args))
                             }
-                            Symbol::Colon => {
-                                // Named arg
-                                iter.next();
-                                Expression::Named(identifier.clone(), Box::new(parse_expression(iter)?))
-                            }
-                            _ => Expression::Variable(identifier.clone())
+                            _ => Expression::Variable(None, identifier.clone())
                         }
                     }
-                    _ => Expression::Variable(identifier.clone())
+                    _ => Expression::Variable(None, identifier.clone())
                 }
             }
             Lexeme::Keyword(_, Keyword::If) => {
@@ -290,20 +285,20 @@ fn parse_non_binary_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expr
                 let success_case = parse_expression(iter)?;
                 expect_keyword(iter, Keyword::Else);
                 let failure_case = parse_expression(iter)?;
-                Expression::If(Box::new(condition), Box::new(success_case), Box::new(failure_case))
+                Expression::If(None, Box::new(condition), Box::new(success_case), Box::new(failure_case))
             }
             Lexeme::Keyword(_, Keyword::Let) => {
                 let name = expect_identifier(iter)?;
                 expect_symbol(iter, Symbol::Equals);
-                Expression::Declare(name, Box::new(parse_expression(iter)?))
+                Expression::Declare( name, Box::new(parse_expression(iter)?))
             }
-            Lexeme::Symbol(_, Symbol::Plus) => Expression::Unary(UnaryOp::Plus, Box::new(parse_non_binary_expression(iter)?)),
-            Lexeme::Symbol(_, Symbol::Dash) => Expression::Unary(UnaryOp::Minus, Box::new(parse_non_binary_expression(iter)?)),
-            Lexeme::Symbol(_, Symbol::Bang) => Expression::Unary(UnaryOp::Not, Box::new(parse_non_binary_expression(iter)?)),
+            Lexeme::Symbol(_, Symbol::Plus) => Expression::Unary(None, UnaryOp::Plus, Box::new(parse_non_binary_expression(iter)?)),
+            Lexeme::Symbol(_, Symbol::Dash) => Expression::Unary(None, UnaryOp::Minus, Box::new(parse_non_binary_expression(iter)?)),
+            Lexeme::Symbol(_, Symbol::Bang) => Expression::Unary(None, UnaryOp::Not, Box::new(parse_non_binary_expression(iter)?)),
             Lexeme::Symbol(_, Symbol::OpenBracket) => {
                 let result = parse_expression(iter)?;
                 expect_symbol(iter, Symbol::CloseBracket);
-                Expression::Wrapped(Box::new(result))
+                Expression::Wrapped(None, Box::new(result))
             }
             Lexeme::Symbol(_, Symbol::OpenBrace) => {
                 let mut block = vec!();
@@ -314,7 +309,7 @@ fn parse_non_binary_expression(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Expr
                 }
                 expect_symbol(iter, Symbol::CloseBrace);
                 skip_newline(iter);
-                Expression::Block(Box::new(block))
+                Expression::Block(None, Box::new(block))
             }
             it => panic!("Unsupported Operation {}", it)
         })
