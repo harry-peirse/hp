@@ -42,7 +42,7 @@ fn type_check_expression(expr: &mut Expression, type_table: &mut HashMap<String,
                         Ok("number".to_string())
                     }
                 }
-                BinaryOp::Assign => {
+                BinaryOp::Assign | BinaryOp::PlusAssign | BinaryOp::MinusAssign | BinaryOp::MultiplyAssign | BinaryOp::DivideAssign => {
                     *_type = Some("void".to_string());
                     Ok("void".to_string())
                 }
@@ -59,6 +59,11 @@ fn type_check_expression(expr: &mut Expression, type_table: &mut HashMap<String,
             *_type = Some(result.clone());
             Ok(result.clone())
         }
+        Expression::Loop(counter, child) => {
+            type_check_expression(counter, type_table)?;
+            type_check_expression(child, type_table)?;
+            Ok("void".to_string())
+        },
         Expression::Wrapped(_type, child) => {
             let result = type_check_expression(child, type_table)?;
             *_type = Some(result.clone());

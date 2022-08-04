@@ -32,8 +32,8 @@ pub enum Lexeme {
 #[derive(Debug, Eq, PartialEq)]
 pub enum Keyword {
     If,
-    Then,
     Else,
+    Loop,
     Let,
     True,
     False,
@@ -43,8 +43,8 @@ impl Display for Keyword {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{}", match self {
             Keyword::If => "if",
-            Keyword::Then => "then",
             Keyword::Else => "else",
+            Keyword::Loop => "loop",
             Keyword::Let => "let",
             Keyword::True => "true",
             Keyword::False => "false"
@@ -74,6 +74,10 @@ pub enum Symbol {
     DoubleEquals,
     BangEquals,
     Equals,
+    PlusEquals,
+    DashEquals,
+    AsteriskEquals,
+    ForwardSlashEquals,
     Dot,
     Colon,
     DoubleColon,
@@ -102,6 +106,10 @@ impl Display for Symbol {
             Symbol::DoubleEquals => "==",
             Symbol::BangEquals => "!=",
             Symbol::Equals => "=",
+            Symbol::PlusEquals => "+=",
+            Symbol::DashEquals => "-=",
+            Symbol::AsteriskEquals => "*=",
+            Symbol::ForwardSlashEquals => "/=",
             Symbol::Dot => ".",
             Symbol::DoubleColon => "::",
             Symbol::Colon => ":"
@@ -132,8 +140,12 @@ fn build_identifier(col: u64, row: u64, word: &String, is_number: bool) -> Resul
     } else {
         match word.as_str() {
             "if" => Lexeme::Keyword(pos, Keyword::If),
-            "then" => Lexeme::Keyword(pos, Keyword::Then),
             "else" => Lexeme::Keyword(pos, Keyword::Else),
+            "loop" => Lexeme::Keyword(pos, Keyword::Loop),
+            "is" => Lexeme::Symbol(pos, Symbol::DoubleEquals),
+            "isnt" => Lexeme::Symbol(pos, Symbol::BangEquals),
+            "or" => Lexeme::Symbol(pos, Symbol::DoubleBar),
+            "and" => Lexeme::Symbol(pos, Symbol::DoubleAmpersand),
             "let" => Lexeme::Keyword(pos, Keyword::Let),
             "true" => Lexeme::Keyword(pos, Keyword::True),
             "false" => Lexeme::Keyword(pos, Keyword::False),
@@ -205,8 +217,6 @@ fn lex_module(mut col: u64, mut row: u64, iter: &mut Peekable<Chars>) -> Result<
                 is_number = false;
                 is_decimal = false;
 
-                println!("{}, {:?} {}", c, iter, word);
-
                 let mut symbol = c.to_string();
                 if ['+', '-', '*', '/', '=', '<', '>', '!', ':', '|', '&'].contains(&c) {
                     match iter.peek() {
@@ -221,32 +231,47 @@ fn lex_module(mut col: u64, mut row: u64, iter: &mut Peekable<Chars>) -> Result<
                     }
                 }
 
-                vec.push(Lexeme::Symbol(Span { col, row, length: symbol.len() as u64 }, match symbol.as_str() {
-                    "{" => Symbol::OpenBrace,
-                    "}" => Symbol::CloseBrace,
-                    "(" => Symbol::OpenBracket,
-                    ")" => Symbol::CloseBracket,
-                    "+" => Symbol::Plus,
-                    "-" => Symbol::Dash,
-                    "*" => Symbol::Asterisk,
-                    "/" => Symbol::ForwardSlash,
-                    "," => Symbol::Comma,
-                    "!" => Symbol::Bang,
-                    "&&" => Symbol::DoubleAmpersand,
-                    "||" => Symbol::DoubleBar,
-                    "<" => Symbol::LeftArrow,
-                    ">" => Symbol::RightArrow,
-                    "<=" => Symbol::LeftArrowEquals,
-                    ">=" => Symbol::RightArrowEquals,
-                    "=>" => Symbol::EqualsRightArrow,
-                    "==" => Symbol::DoubleEquals,
-                    "!=" => Symbol::BangEquals,
-                    "=" => Symbol::Equals,
-                    "." => Symbol::Dot,
-                    "::" => Symbol::DoubleColon,
-                    ":" => Symbol::Colon,
-                    _ => panic!("Unrecognised symbol {}", symbol)
-                }));
+                if symbol == "//" {
+                    word = String::new();
+                    while let Some(c) = iter.peek() {
+                        if c != &'\n' {
+                            iter.next();
+                        } else {
+                            break;
+                        }
+                    }
+                } else {
+                    vec.push(Lexeme::Symbol(Span { col, row, length: symbol.len() as u64 }, match symbol.as_str() {
+                        "{" => Symbol::OpenBrace,
+                        "}" => Symbol::CloseBrace,
+                        "(" => Symbol::OpenBracket,
+                        ")" => Symbol::CloseBracket,
+                        "+" => Symbol::Plus,
+                        "-" => Symbol::Dash,
+                        "*" => Symbol::Asterisk,
+                        "/" => Symbol::ForwardSlash,
+                        "," => Symbol::Comma,
+                        "!" => Symbol::Bang,
+                        "&&" => Symbol::DoubleAmpersand,
+                        "||" => Symbol::DoubleBar,
+                        "<" => Symbol::LeftArrow,
+                        ">" => Symbol::RightArrow,
+                        "<=" => Symbol::LeftArrowEquals,
+                        ">=" => Symbol::RightArrowEquals,
+                        "=>" => Symbol::EqualsRightArrow,
+                        "==" => Symbol::DoubleEquals,
+                        "!=" => Symbol::BangEquals,
+                        "=" => Symbol::Equals,
+                        "+=" => Symbol::PlusEquals,
+                        "-=" => Symbol::DashEquals,
+                        "*=" => Symbol::AsteriskEquals,
+                        "/=" => Symbol::ForwardSlashEquals,
+                        "." => Symbol::Dot,
+                        "::" => Symbol::DoubleColon,
+                        ":" => Symbol::Colon,
+                        _ => panic!("Unrecognised symbol {}", symbol)
+                    }));
+                }
             }
             '0'..='9' => {
                 if word.is_empty() {

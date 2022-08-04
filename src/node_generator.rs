@@ -90,6 +90,10 @@ fn generate_expression(expr: &Expression, depth: usize) -> String {
                     generate_expression(condition, depth),
                     generate_expression(success, depth + 1),
                     generate_expression(failure, depth + 1)),
+        Expression::Loop(count, body) =>
+        format!("for (let $i = 0; $i < {}; $i++) {}",
+                generate_expression(count, depth),
+                generate_expression(body, depth + 1)),
         Expression::Declare(name, expr) =>
             format!("var {} = {}", name, generate_expression(expr, depth))
     }
@@ -118,6 +122,10 @@ fn get_binary_op(op: &BinaryOp) -> &str {
         BinaryOp::Equals => "==",
         BinaryOp::NotEquals => "!=",
         BinaryOp::Assign => "=",
+        BinaryOp::PlusAssign => "+=",
+        BinaryOp::MinusAssign => "-=",
+        BinaryOp::MultiplyAssign => "*=",
+        BinaryOp::DivideAssign => "/=",
         BinaryOp::Dot => ".",
     }
 }

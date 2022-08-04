@@ -23,8 +23,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     fs::create_dir_all("./samples/output")
         .expect("Could not create output directory for node");
 
-    run_pipeline("./samples/hello_world.hp")?;
-    run_pipeline("./samples/greeter.hp")?;
+    // run_pipeline("./samples/hello_world.hp")?;
+    // run_pipeline("./samples/greeter.hp")?;
+    run_pipeline("./samples/counter.hp")?;
 
     Ok(())
 }
