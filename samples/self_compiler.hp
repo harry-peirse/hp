@@ -1,0 +1,7 @@
+use lexer
+
+main :: => {
+    let file_name = "./samples/hello_world.hp"
+    let file_contents = read_file(file_name)
+    lexer.lex(file_contents)
+}

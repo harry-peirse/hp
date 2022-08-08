@@ -3,8 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::iter::Peekable;
 use std::str::Chars;
 
-#[derive(Clone)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Span {
     col: u64,
     row: u64,
@@ -37,6 +36,7 @@ pub enum Keyword {
     Let,
     True,
     False,
+    Use,
 }
 
 impl Display for Keyword {
@@ -47,7 +47,8 @@ impl Display for Keyword {
             Keyword::Loop => "loop",
             Keyword::Let => "let",
             Keyword::True => "true",
-            Keyword::False => "false"
+            Keyword::False => "false",
+            Keyword::Use => "use"
         })
     }
 }
@@ -149,6 +150,7 @@ fn build_identifier(col: u64, row: u64, word: &String, is_number: bool) -> Resul
             "let" => Lexeme::Keyword(pos, Keyword::Let),
             "true" => Lexeme::Keyword(pos, Keyword::True),
             "false" => Lexeme::Keyword(pos, Keyword::False),
+            "use" => Lexeme::Keyword(pos, Keyword::Use),
             _ => Lexeme::Identifier(pos, word.clone())
         }
     })
@@ -294,8 +296,6 @@ fn lex_module(mut col: u64, mut row: u64, iter: &mut Peekable<Chars>) -> Result<
             }
         }
     }
-
-    println!("{:?} {:?}", iter, word);
 
     vec.push(Lexeme::Eof(Span { col, row, length: 0 }));
     Ok(vec)

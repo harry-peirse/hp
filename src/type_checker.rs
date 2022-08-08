@@ -2,19 +2,25 @@ use std::collections::HashMap;
 use std::error::Error;
 
 use crate::parser::{BinaryOp, Declaration, Expression, Function, Struct};
+use crate::Project;
 
-pub fn type_check(declarations: &mut Vec<Declaration>) -> Result<(), Box<dyn Error>> {
-    for declaration in declarations {
-        match declaration {
-            Declaration::Function(fun) => type_check_function(fun)?,
-            _ => ()
+pub fn type_check(project: &mut Project) -> Result<(), Box<dyn Error>> {
+    for module in &mut project.modules {
+        for mut function in &mut module.functions {
+            type_check_function(&mut function, &module.module_imports)?;
         }
     }
     Ok(())
 }
 
-fn type_check_function(fun: &mut Function) -> Result<(), Box<dyn Error>> {
+fn type_check_function(fun: &mut Function, imports: &Vec<String>) -> Result<(), Box<dyn Error>> {
     let mut type_table = HashMap::new();
+    for import in imports {
+        type_table.insert(import.clone(), "import".to_string());
+    }
+    for arg in &*fun.args {
+        type_table.insert(arg.name.clone(), arg.type_name.clone());
+    }
     fun.return_type = Some(type_check_expression(&mut fun.body, &mut type_table)?);
     Ok(())
 }

@@ -1,11 +1,25 @@
-use crate::parser::{BinaryOp, Declaration, Expression, Function, Struct, UnaryOp};
+use std::error::Error;
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 
-pub fn generate_node(ast: &Vec<Declaration>) -> String {
-    let functions = ast.iter().map(|it| match it {
-        Declaration::Function(fun) => generate_function(fun),
-        Declaration::Struct(str) => generate_struct(str)
-    }).collect::<Vec<String>>().join("\n\n");
-    format!("$readline = require('readline');
+use crate::parser::{BinaryOp, Declaration, Expression, Function, Struct, UnaryOp};
+use crate::Project;
+
+pub fn generate_node(project: &Project) -> Result<(), Box<dyn Error>> {
+    for module in project.modules.iter() {
+        let imports = module.module_imports.iter()
+            .map(|it| format!("{name} = require('{name}');", name = it))
+            .collect::<Vec<String>>()
+            .join("\n");
+        let functions = module.functions.iter()
+            .map(|it| generate_function(it))
+            .collect::<Vec<String>>()
+            .join("\n\n");
+        let file_contents = format!("$readline = require('readline');
+$fs = require('fs');
+
+{}
 
 {}
 
@@ -22,7 +36,15 @@ async function read() {{
     rl.close();
     return result;
 }}
-", functions)
+
+async function read_file(filename) {{
+    return $fs.readFileSync(filename).toString();
+}}
+", imports, functions);
+
+        File::create(Path::new(&format!("./samples/output/{}.js", module.name)))?.write(file_contents.as_bytes())?;
+    }
+    Ok(())
 }
 
 fn generate_function(fun: &Function) -> String {
@@ -91,11 +113,11 @@ fn generate_expression(expr: &Expression, depth: usize) -> String {
                     generate_expression(success, depth + 1),
                     generate_expression(failure, depth + 1)),
         Expression::Loop(count, body) =>
-        format!("for (let $i = 0; $i < {}; $i++) {}",
-                generate_expression(count, depth),
-                generate_expression(body, depth + 1)),
+            format!("for (let $i = 0; $i < {}; $i++) {}",
+                    generate_expression(count, depth),
+                    generate_expression(body, depth + 1)),
         Expression::Declare(name, expr) =>
-            format!("var {} = {}", name, generate_expression(expr, depth))
+            format!("let {} = {}", name, generate_expression(expr, depth))
     }
 }
 

@@ -45,6 +45,7 @@ impl Display for Argument {
 
 #[derive(Debug, Clone)]
 pub enum Declaration {
+    Import(String),
     Function(Function),
     Struct(Struct),
 }
@@ -149,19 +150,24 @@ pub fn parse(lexemes: Vec<Lexeme>) -> Result<Vec<Declaration>, Box<dyn Error>> {
 }
 
 fn parse_declaration(iter: &mut Peekable<Iter<Lexeme>>) -> Result<Declaration, Box<dyn Error>> {
-    let name = expect_identifier(iter)?;
-    skip_newline(iter);
-    expect_symbol(iter, Symbol::DoubleColon);
-    skip_newline(iter);
-
-    let mut args = parse_arguments(iter)?;
-
-    skip_newline(iter);
-    if let Some(Lexeme::Symbol(_, Symbol::EqualsRightArrow)) = iter.peek() {
-        expect_symbol(iter, Symbol::EqualsRightArrow);
-        Ok(Declaration::Function(Function { name, args: Box::new(args), body: parse_expression(iter)? , return_type: None}))
+    if is_keyword(iter, Keyword::Use) {
+        expect_keyword(iter, Keyword::Use);
+        Ok(Declaration::Import(expect_identifier(iter)?))
     } else {
-        Ok(Declaration::Struct(Struct { name, fields: Box::new(args) }))
+        let name = expect_identifier(iter)?;
+        skip_newline(iter);
+        expect_symbol(iter, Symbol::DoubleColon);
+        skip_newline(iter);
+
+        let mut args = parse_arguments(iter)?;
+
+        skip_newline(iter);
+        if let Some(Lexeme::Symbol(_, Symbol::EqualsRightArrow)) = iter.peek() {
+            expect_symbol(iter, Symbol::EqualsRightArrow);
+            Ok(Declaration::Function(Function { name, args: Box::new(args), body: parse_expression(iter)?, return_type: None }))
+        } else {
+            Ok(Declaration::Struct(Struct { name, fields: Box::new(args) }))
+        }
     }
 }
 
@@ -365,4 +371,8 @@ fn expect_keyword(iter: &mut Peekable<Iter<Lexeme>>, keyword: Keyword) {
 
 fn is_symbol(iter: &mut Peekable<Iter<Lexeme>>, symbol: Symbol) -> bool {
     matches!(iter.peek(), Some(Lexeme::Symbol(_, it)) if *it == symbol)
+}
+
+fn is_keyword(iter: &mut Peekable<Iter<Lexeme>>, keyword: Keyword) -> bool {
+    matches!(iter.peek(), Some(Lexeme::Keyword(_, it)) if *it == keyword)
 }

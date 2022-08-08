@@ -6,11 +6,14 @@ use std::io::{Read, Write};
 use std::iter::Map;
 use std::path::Path;
 use std::process::Command;
+use std::rc::Rc;
 use std::str::from_utf8;
 
 use lexer::lex;
 use node_generator::generate_node;
 use parser::parse;
+
+use crate::parser::{Declaration, Function, Struct};
 use crate::type_checker::type_check;
 
 mod lexer;
@@ -25,42 +28,25 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // run_pipeline("./samples/hello_world.hp")?;
     // run_pipeline("./samples/greeter.hp")?;
-    run_pipeline("./samples/counter.hp")?;
-
+    // run_pipeline("./samples/counter.hp")?;
+    run_pipeline("self_compiler")?;
     Ok(())
 }
 
-fn run_pipeline(filename: &str) -> Result<(), Box<dyn Error>> {
-    let mut code = String::new();
-    File::open(Path::new(filename))?.read_to_string(&mut code)?;
+fn run_pipeline(file_name: &str) -> Result<(), Box<dyn Error>> {
+    let mut project = compile_to_project(file_name.to_string())?;
 
-    println!("Code");
-    println!("{}", code);
+    println!("Created project {:#?}", project);
 
-    let vec = lex(code.to_string())?;
+    type_check(&mut project)?;
 
-    println!("\nLexemes");
-    println!("{}", vec.iter().map(|it| it.to_string()).collect::<Vec<String>>().join("\n"));
-
-    let mut ast = parse(vec)?;
-
-    println!("\nAST");
-    println!("{}", ast.iter().map(|it| it.to_string()).collect::<Vec<String>>().join("\n"));
-
-    println!("\nType Checking");
-    type_check(&mut ast)?;
-    println!("{}", ast.iter().map(|it| it.to_string()).collect::<Vec<String>>().join("\n"));
+    println!("Type-checked project {:#?}", project);
 
     println!("\nNode Target");
-    let node_output = generate_node(&ast);
-    println!("{}", node_output);
-
-    let output_filename: String = filename.to_string().replace("samples", "samples/output") + ".js";
-    println!("{}", output_filename);
-    File::create(Path::new(&output_filename))?.write(node_output.as_bytes())?;
+    generate_node(&project)?;
 
     let output = Command::new("node")
-        .arg(output_filename)
+        .arg(format!("./samples/output/{}", file_name))
         .output()
         .expect("failed to execute process");
 
@@ -70,4 +56,60 @@ fn run_pipeline(filename: &str) -> Result<(), Box<dyn Error>> {
     println!("{}", result);
 
     Ok(())
+}
+
+fn compile_to_project(file_name: String) -> Result<Project, Box<dyn Error>> {
+    let mut unresolved_modules = vec!();
+    let mut module_map = HashMap::new();
+    unresolved_modules.push(file_name.clone());
+    while !unresolved_modules.is_empty() {
+        let module_name = unresolved_modules.remove(0);
+        let mut module = parse_module(&module_name)?;
+        for import in &module.module_imports {
+            if let None = module_map.get(&import.clone()) {
+                if !unresolved_modules.contains(&import) {
+                    unresolved_modules.push(import.clone())
+                }
+            }
+        }
+        module_map.insert(module_name.clone(), module);
+    }
+    Ok(Project { modules: module_map.into_values().collect::<Vec<Module>>() })
+}
+
+fn parse_module(file_name: &String) -> Result<Module, Box<dyn Error>> {
+    let mut code = String::new();
+    File::open(Path::new(&format!("./samples/{}.hp", file_name)))?.read_to_string(&mut code)?;
+
+    let mut module = Module {
+        name: file_name.to_string(),
+        module_imports: vec!(),
+        functions: vec!(),
+        structs: vec!(),
+    };
+
+    let lexemes = lex(code)?;
+    let declarations = parse(lexemes)?;
+    for dec in declarations {
+        match dec {
+            Declaration::Import(it) => module.module_imports.push(it),
+            Declaration::Function(it) => module.functions.push(it),
+            Declaration::Struct(it) => module.structs.push(it),
+        }
+    }
+
+    Ok(module)
+}
+
+#[derive(Debug)]
+pub struct Project {
+    pub modules: Vec<Module>,
+}
+
+#[derive(Debug)]
+pub struct Module {
+    pub name: String,
+    pub module_imports: Vec<String>,
+    pub functions: Vec<Function>,
+    pub structs: Vec<Struct>,
 }
